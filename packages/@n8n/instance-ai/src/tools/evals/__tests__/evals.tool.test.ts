@@ -304,10 +304,10 @@ describe('evalsTool — delegates to eval-setup-agent', () => {
 	});
 });
 
-describe('evalsTool — action: check (eligibility precheck)', () => {
+describe('evalsTool — action: offer (proactive approve/deny widget)', () => {
 	beforeEach(() => jest.clearAllMocks());
 
-	it('returns eligible:false with reason no-ai-nodes for a workflow without langchain nodes', async () => {
+	it('returns eligible:false with reason no-ai-nodes and never suspends for a non-AI workflow', async () => {
 		const wf = {
 			name: 'Plain',
 			nodes: [
@@ -324,12 +324,14 @@ describe('evalsTool — action: check (eligibility precheck)', () => {
 		} as unknown as WorkflowJSON;
 		const ctx = makeCtx(wf);
 		const tool = createEvalsTool(ctx);
+		const suspend = jest.fn();
 
-		const result = (await tool.execute!({ action: 'check', workflowId: 'w1' }, {
-			agent: {},
+		const result = (await tool.execute!({ action: 'offer', workflowId: 'w1' }, {
+			agent: { suspend, resumeData: undefined },
 		} as never)) as Record<string, unknown>;
 
 		expect(result).toEqual({ eligible: false, reason: 'no-ai-nodes' });
+		expect(suspend).not.toHaveBeenCalled();
 	});
 
 	it('returns eligible:false with reason already-configured when EvaluationTrigger is present', async () => {
@@ -337,19 +339,11 @@ describe('evalsTool — action: check (eligibility precheck)', () => {
 			name: 'Already',
 			nodes: [
 				{
-					id: '1',
-					name: 'T',
-					type: 'n8n-nodes-base.manualTrigger',
-					typeVersion: 1,
-					position: [0, 0],
-					parameters: {},
-				},
-				{
 					id: '2',
 					name: 'Agent',
 					type: '@n8n/n8n-nodes-langchain.agent',
 					typeVersion: 1,
-					position: [200, 0],
+					position: [0, 0],
 					parameters: {},
 				},
 				{
@@ -365,48 +359,17 @@ describe('evalsTool — action: check (eligibility precheck)', () => {
 		} as unknown as WorkflowJSON;
 		const ctx = makeCtx(wf);
 		const tool = createEvalsTool(ctx);
+		const suspend = jest.fn();
 
-		const result = (await tool.execute!({ action: 'check', workflowId: 'w1' }, {
-			agent: {},
+		const result = (await tool.execute!({ action: 'offer', workflowId: 'w1' }, {
+			agent: { suspend, resumeData: undefined },
 		} as never)) as Record<string, unknown>;
 
 		expect(result).toEqual({ eligible: false, reason: 'already-configured' });
+		expect(suspend).not.toHaveBeenCalled();
 	});
 
-	it('returns eligible:false with reason already-configured when an Evaluation node is present', async () => {
-		const wf = {
-			name: 'Already',
-			nodes: [
-				{
-					id: '2',
-					name: 'Agent',
-					type: '@n8n/n8n-nodes-langchain.agent',
-					typeVersion: 1,
-					position: [0, 0],
-					parameters: {},
-				},
-				{
-					id: '3',
-					name: 'Eval',
-					type: 'n8n-nodes-base.evaluation',
-					typeVersion: 1,
-					position: [200, 0],
-					parameters: {},
-				},
-			],
-			connections: {},
-		} as unknown as WorkflowJSON;
-		const ctx = makeCtx(wf);
-		const tool = createEvalsTool(ctx);
-
-		const result = (await tool.execute!({ action: 'check', workflowId: 'w1' }, {
-			agent: {},
-		} as never)) as Record<string, unknown>;
-
-		expect(result).toEqual({ eligible: false, reason: 'already-configured' });
-	});
-
-	it('returns eligible:false with reason root-agent-reads-other-node when the agent reads upstream node JSON', async () => {
+	it('returns eligible:false with reason root-agent-reads-other-node and never suspends', async () => {
 		const wf = {
 			name: 'Reads Trigger',
 			nodes: [
@@ -431,82 +394,82 @@ describe('evalsTool — action: check (eligibility precheck)', () => {
 		} as unknown as WorkflowJSON;
 		const ctx = makeCtx(wf);
 		const tool = createEvalsTool(ctx);
+		const suspend = jest.fn();
 
-		const result = (await tool.execute!({ action: 'check', workflowId: 'w1' }, {
-			agent: {},
+		const result = (await tool.execute!({ action: 'offer', workflowId: 'w1' }, {
+			agent: { suspend, resumeData: undefined },
 		} as never)) as Record<string, unknown>;
 
 		expect(result).toEqual({ eligible: false, reason: 'root-agent-reads-other-node' });
+		expect(suspend).not.toHaveBeenCalled();
 	});
 
-	it('returns eligible:true with aiNodeNames for a clean AI workflow', async () => {
+	it('suspends with the strict approve/deny widget on the first call when eligible', async () => {
+		const ctx = makeCtx(aiWf());
+		const tool = createEvalsTool(ctx);
+		const suspend = jest.fn();
+
+		await tool.execute!({ action: 'offer', workflowId: 'w1' }, {
+			agent: { suspend, resumeData: undefined },
+		} as never);
+
+		expect(suspend).toHaveBeenCalledTimes(1);
+		const payload = suspend.mock.calls[0][0] as Record<string, unknown>;
+		expect(payload).toMatchObject({
+			severity: 'info',
+			message: expect.stringMatching(/Generate an eval suite/i) as unknown,
+		});
+		expect(payload).toHaveProperty('requestId');
+		expect(payload).not.toHaveProperty('inputType');
+		expect(payload).not.toHaveProperty('questions');
+		expect(payload).not.toHaveProperty('options');
+	});
+
+	it('builds a singular message when there is exactly one AI node', async () => {
+		const ctx = makeCtx(aiWf());
+		const tool = createEvalsTool(ctx);
+		const suspend = jest.fn();
+
+		await tool.execute!({ action: 'offer', workflowId: 'w1' }, {
+			agent: { suspend, resumeData: undefined },
+		} as never);
+
+		expect(suspend.mock.calls[0][0].message).toBe('Generate an eval suite for AI node `Agent`?');
+	});
+
+	it('returns approved:true with aiNodeNames when the user approves', async () => {
 		const ctx = makeCtx(aiWf());
 		const tool = createEvalsTool(ctx);
 
-		const result = (await tool.execute!({ action: 'check', workflowId: 'w1' }, {
-			agent: {},
+		const result = (await tool.execute!({ action: 'offer', workflowId: 'w1' }, {
+			agent: { resumeData: { approved: true } },
 		} as never)) as Record<string, unknown>;
 
-		expect(result).toEqual({ eligible: true, aiNodeNames: ['Agent'] });
+		expect(result).toEqual({ eligible: true, approved: true, aiNodeNames: ['Agent'] });
 	});
 
-	it('includes non-root langchain nodes (chat models, tools, memory) in aiNodeNames', async () => {
-		const wf = {
-			name: 'Multi',
-			nodes: [
-				{
-					id: '1',
-					name: 'T',
-					type: 'n8n-nodes-base.manualTrigger',
-					typeVersion: 1,
-					position: [0, 0],
-					parameters: {},
-				},
-				{
-					id: '2',
-					name: 'Agent',
-					type: '@n8n/n8n-nodes-langchain.agent',
-					typeVersion: 1,
-					position: [200, 0],
-					parameters: {},
-				},
-				{
-					id: '3',
-					name: 'Chat Model',
-					type: '@n8n/n8n-nodes-langchain.lmChatOpenAi',
-					typeVersion: 1,
-					position: [200, 200],
-					parameters: {},
-				},
-				{
-					id: '4',
-					name: 'Memory',
-					type: '@n8n/n8n-nodes-langchain.memoryBufferWindow',
-					typeVersion: 1,
-					position: [400, 200],
-					parameters: {},
-				},
-			],
-			connections: {},
-		} as unknown as WorkflowJSON;
-		const ctx = makeCtx(wf);
-		const tool = createEvalsTool(ctx);
-
-		const result = (await tool.execute!({ action: 'check', workflowId: 'w1' }, {
-			agent: {},
-		} as never)) as Record<string, unknown>;
-
-		expect(result).toMatchObject({ eligible: true });
-		expect((result as { aiNodeNames: string[] }).aiNodeNames).toEqual(
-			expect.arrayContaining(['Agent', 'Chat Model', 'Memory']),
-		);
-	});
-
-	it('does NOT invoke inferEvalShape — guards the cheap-precheck contract', async () => {
+	it('returns approved:false when the user denies', async () => {
 		const ctx = makeCtx(aiWf());
 		const tool = createEvalsTool(ctx);
 
-		await tool.execute!({ action: 'check', workflowId: 'w1' }, { agent: {} } as never);
+		const result = (await tool.execute!({ action: 'offer', workflowId: 'w1' }, {
+			agent: { resumeData: { approved: false } },
+		} as never)) as Record<string, unknown>;
+
+		expect(result).toEqual({ eligible: true, approved: false });
+	});
+
+	it('does NOT invoke inferEvalShape — offer is a precheck, not a builder', async () => {
+		const ctx = makeCtx(aiWf());
+		const tool = createEvalsTool(ctx);
+		const suspend = jest.fn();
+
+		await tool.execute!({ action: 'offer', workflowId: 'w1' }, {
+			agent: { suspend, resumeData: undefined },
+		} as never);
+		await tool.execute!({ action: 'offer', workflowId: 'w1' }, {
+			agent: { resumeData: { approved: true } },
+		} as never);
 
 		expect(mockInfer).not.toHaveBeenCalled();
 	});

@@ -237,14 +237,17 @@ describe('getSystemPrompt', () => {
 	});
 
 	describe('fresh-build eval suite offer', () => {
-		it('inserts the offer as Post-build flow step 4 with a check → ask-user → propose chain', () => {
+		it('inserts the offer as Post-build flow step 4 with a strict approve/deny widget chain', () => {
 			const prompt = getSystemPrompt({});
 
 			expect(prompt).toContain('**Fresh-build eval suite offer.**');
 			expect(prompt).toContain('did NOT pass an existing `workflowId`');
-			expect(prompt).toContain('evals(action="check", workflowId)');
-			expect(prompt).toContain('`eligible: false`');
-			expect(prompt).toContain('`eligible: true`');
+			expect(prompt).toContain('evals(action="offer", workflowId, projectId)');
+			expect(prompt).toContain('strict approve/deny confirmation widget');
+			expect(prompt).toContain('Do NOT use `ask-user`');
+			expect(prompt).toContain('eligible: false');
+			expect(prompt).toContain('approved: false');
+			expect(prompt).toContain('approved: true');
 			expect(prompt).toContain('aiNodeNames');
 			expect(prompt).toContain('evals(action="propose", workflowId, projectId)');
 			expect(prompt).toContain('eval-setup-with-agent');
@@ -264,7 +267,7 @@ describe('getSystemPrompt', () => {
 			const prompt = getSystemPrompt({});
 
 			expect(prompt).toContain('Failures within step 4 are non-fatal');
-			expect(prompt).toContain('treat as `eligible: false`');
+			expect(prompt).toContain('continue to step 5 silently');
 			expect(prompt).toContain("Couldn't add eval suite");
 			expect(prompt).toContain('Eval nodes are set up but sample rows');
 		});
@@ -280,10 +283,8 @@ describe('getSystemPrompt', () => {
 		it('extends the synthesize follow-up with the same offer for the first eligible workflow', () => {
 			const prompt = getSystemPrompt({});
 
-			expect(prompt).toMatch(/Before writing the completion message.*evals\(action="check"/s);
-			expect(prompt).toContain(
-				'same fresh-build eval suite offer as **Post-build flow** step 4 (c–g)',
-			);
+			expect(prompt).toMatch(/evals\(action="offer", workflowId, projectId\)/);
+			expect(prompt).toContain('strict approve/deny widget');
 			expect(prompt).toContain('run the offer flow for the first one only');
 		});
 	});

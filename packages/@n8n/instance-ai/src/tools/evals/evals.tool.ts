@@ -1,9 +1,12 @@
 import { createTool } from '@mastra/core/tools';
+import { instanceAiConfirmationSeveritySchema } from '@n8n/api-types';
+import { nanoid } from 'nanoid';
 import { z } from 'zod';
 
 import { detectAiNodes } from './detect-ai-nodes';
 import { formatEvalSetupTask } from './format-eval-setup-task';
 import { DEFAULT_EVAL_SHAPE, inferEvalShape, type EvalShape } from './infer-eval-shape.service';
+import { sanitizeInputSchema } from '../../agent/sanitize-mcp-schemas';
 import type { InstanceAiContext } from '../../types';
 
 const ACTUAL_COLUMN_PREFIX_REGEX = /^actual[_-]/i;
@@ -36,25 +39,20 @@ async function deriveShapeFromDataTable(
 	}
 }
 
-const inputSchema = z.object({
+const proposeAction = z.object({
 	action: z
-		.enum(['propose', 'check'])
-		.describe(
-			'`check` = cheap eligibility precheck (no LLM calls, no side effects); ' +
-				'`propose` = build a full eval-setup task to delegate to `eval-setup-with-agent`.',
-		),
+		.literal('propose')
+		.describe('Build a full eval-setup task to delegate to `eval-setup-with-agent`'),
 	workflowId: z.string().describe('ID of the workflow'),
 	projectId: z
 		.string()
 		.optional()
-		.describe(
-			'Project ID — forwarded to the eval-setup-agent for DataTable creation. Used by `propose` only.',
-		),
+		.describe('Project ID — forwarded to the eval-setup-agent for DataTable creation'),
 	datasetChoice: z
 		.enum(['create-empty', 'link-existing', 'later'])
 		.optional()
 		.describe(
-			'Dataset strategy (used by `propose` only). Default `create-empty` — sub-agent creates a fresh empty DataTable. ' +
+			'Dataset strategy. Default `create-empty` — sub-agent creates a fresh empty DataTable. ' +
 				'Use `link-existing` when the user references an existing DataTable (must pass `existingDataTableId`). ' +
 				'Use `later` when the user explicitly wants to wire the dataset themselves.',
 		),
@@ -62,32 +60,101 @@ const inputSchema = z.object({
 		.string()
 		.optional()
 		.describe(
-			'Required when `datasetChoice="link-existing"` (used by `propose` only). The DataTable id to wire into the EvaluationTrigger.',
+			'Required when `datasetChoice="link-existing"`. The DataTable id to wire into the EvaluationTrigger.',
 		),
 });
 
+const offerAction = z.object({
+	action: z
+		.literal('offer')
+		.describe(
+			'Proactive offer: precheck eligibility and, if eligible, suspend with a strict approve/deny confirmation widget asking the user whether to generate an eval suite. No free-text input.',
+		),
+	workflowId: z.string().describe('ID of the workflow'),
+	projectId: z
+		.string()
+		.optional()
+		.describe('Project ID — forwarded to the eval-setup-agent for DataTable creation'),
+});
+
+const inputSchema = sanitizeInputSchema(
+	z.discriminatedUnion('action', [proposeAction, offerAction]),
+);
+
 type Input = z.infer<typeof inputSchema>;
+
+const confirmationSuspendSchema = z.object({
+	requestId: z.string(),
+	message: z.string(),
+	severity: instanceAiConfirmationSeveritySchema,
+});
+
+const confirmationResumeSchema = z.object({
+	approved: z.boolean(),
+});
+
+type ResumeData = z.infer<typeof confirmationResumeSchema>;
+
+function offerMessage(aiNodeNames: string[]): string {
+	if (aiNodeNames.length === 1) {
+		return `Generate an eval suite for AI node \`${aiNodeNames[0]}\`?`;
+	}
+	return `Generate an eval suite for ${aiNodeNames.length} AI nodes in this workflow?`;
+}
 
 export function createEvalsTool(context: InstanceAiContext) {
 	return createTool({
 		id: 'evals',
 		description:
-			"Check eligibility (`action='check'`, cheap precheck — no LLM calls) or propose a full evaluation setup (`action='propose'`). Use `check` proactively after a fresh AI workflow build to gate an eval-suite offer to the user; use `propose` when the user explicitly accepts the offer or asks to add evals to an existing workflow.",
+			"Offer a proactive eval-suite setup (`action='offer'`, shows an approve/deny widget when the workflow is eligible) or build a full eval-setup task to delegate (`action='propose'`). Use `offer` after a fresh AI workflow build; use `propose` after the user accepts the offer, or when the user explicitly asks to add evals to an existing workflow.",
 		inputSchema,
-		execute: async (input: Input) => {
-			const wf = await context.workflowService.getAsWorkflowJSON(input.workflowId);
-			const detection = detectAiNodes(wf);
+		suspendSchema: confirmationSuspendSchema,
+		resumeSchema: confirmationResumeSchema,
+		execute: async (input: Input, ctx) => {
+			if (input.action === 'offer') {
+				const resumeData = ctx?.agent?.resumeData as ResumeData | undefined;
+				const suspend = ctx?.agent?.suspend;
 
-			if (input.action === 'check') {
-				if (!detection.isAiWorkflow) return { eligible: false, reason: 'no-ai-nodes' as const };
+				const wf = await context.workflowService.getAsWorkflowJSON(input.workflowId);
+				const detection = detectAiNodes(wf);
+
+				// Resume path — short-circuit on user response without re-detecting.
+				if (resumeData !== undefined && resumeData !== null) {
+					if (!resumeData.approved) {
+						return { eligible: true as const, approved: false as const };
+					}
+					return {
+						eligible: true as const,
+						approved: true as const,
+						aiNodeNames: detection.aiNodeNames,
+					};
+				}
+
+				// First call — precheck. Only suspend when eligible.
+				if (!detection.isAiWorkflow) {
+					return { eligible: false as const, reason: 'no-ai-nodes' as const };
+				}
 				if (detection.alreadyConfigured) {
-					return { eligible: false, reason: 'already-configured' as const };
+					return { eligible: false as const, reason: 'already-configured' as const };
 				}
 				if (detection.rootAgentReadsOtherNode) {
-					return { eligible: false, reason: 'root-agent-reads-other-node' as const };
+					return {
+						eligible: false as const,
+						reason: 'root-agent-reads-other-node' as const,
+					};
 				}
-				return { eligible: true as const, aiNodeNames: detection.aiNodeNames };
+
+				await suspend?.({
+					requestId: nanoid(),
+					message: offerMessage(detection.aiNodeNames),
+					severity: 'info' as const,
+				});
+				// suspend() never resolves on first call.
+				return { eligible: true as const, approved: false as const };
 			}
+
+			const wf = await context.workflowService.getAsWorkflowJSON(input.workflowId);
+			const detection = detectAiNodes(wf);
 
 			if (!detection.isAiWorkflow) {
 				return { skipped: true, reason: 'Workflow has no AI/LLM nodes.' };
