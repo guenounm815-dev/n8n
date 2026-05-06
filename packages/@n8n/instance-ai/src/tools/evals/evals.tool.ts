@@ -4,6 +4,7 @@ import { nanoid } from 'nanoid';
 import { z } from 'zod';
 
 import { detectAiNodes } from './detect-ai-nodes';
+import { ensureEvalDataTable } from './ensure-eval-data-table.service';
 import { formatEvalSetupTask } from './format-eval-setup-task';
 import { DEFAULT_EVAL_SHAPE, inferEvalShape, type EvalShape } from './infer-eval-shape.service';
 import { sanitizeInputSchema } from '../../agent/sanitize-mcp-schemas';
@@ -49,10 +50,10 @@ const proposeAction = z.object({
 		.optional()
 		.describe('Project ID — forwarded to the eval-setup-agent for DataTable creation'),
 	datasetChoice: z
-		.enum(['create-empty', 'link-existing', 'later'])
+		.enum(['generate', 'link-existing', 'later'])
 		.optional()
 		.describe(
-			'Dataset strategy. Default `create-empty` — sub-agent creates a fresh empty DataTable. ' +
+			'Dataset strategy. Default `generate` — propose creates a fresh DataTable AND populates it with LLM-generated sample rows inline, then asks the sub-agent to link it. ' +
 				'Use `link-existing` when the user references an existing DataTable (must pass `existingDataTableId`). ' +
 				'Use `later` when the user explicitly wants to wire the dataset themselves.',
 		),
@@ -137,12 +138,6 @@ export function createEvalsTool(context: InstanceAiContext) {
 				if (detection.alreadyConfigured) {
 					return { eligible: false as const, reason: 'already-configured' as const };
 				}
-				if (detection.rootAgentReadsOtherNode) {
-					return {
-						eligible: false as const,
-						reason: 'root-agent-reads-other-node' as const,
-					};
-				}
 
 				await suspend?.({
 					requestId: nanoid(),
@@ -165,13 +160,6 @@ export function createEvalsTool(context: InstanceAiContext) {
 					reason: 'Workflow already has an EvaluationTrigger or Evaluation node.',
 				};
 			}
-			if (detection.rootAgentReadsOtherNode) {
-				return {
-					skipped: true,
-					reason:
-						"A root AI agent reads JSON from another node directly (e.g. $('Some Node').item.json). Topology-only eval setup cannot isolate this target without modifying production node parameters or mocking those upstream nodes.",
-				};
-			}
 
 			const inferred = await inferEvalShape(wf).catch(() => DEFAULT_EVAL_SHAPE);
 
@@ -191,19 +179,33 @@ export function createEvalsTool(context: InstanceAiContext) {
 
 			const enabledMetrics = shape.suggestedMetrics.filter((m) => m.defaultEnabled);
 
-			const datasetChoice =
-				input.datasetChoice === 'link-existing' && input.existingDataTableId
-					? 'link-existing'
-					: input.datasetChoice === 'later'
-						? 'later'
-						: 'create-empty';
+			// Resolve dataset strategy. Default = `generate` — create AND populate
+			// a DataTable inline so the sub-agent only has to wire the
+			// EvaluationTrigger to a ready-made dataset (eliminates the second
+			// confirmation widget and the brittle separate eval-data step).
+			const datasetChoiceRaw = input.datasetChoice ?? 'generate';
+			let dataTableId: string | undefined = input.existingDataTableId;
+			let datasetChoiceForTask: 'link-existing' | 'later' = 'later';
+
+			if (datasetChoiceRaw === 'link-existing' && input.existingDataTableId) {
+				datasetChoiceForTask = 'link-existing';
+			} else if (datasetChoiceRaw === 'generate') {
+				const dt = await ensureEvalDataTable(context, {
+					workflowName: wf.name ?? 'Workflow',
+					projectId: input.projectId,
+					columns: [...shape.suggestedInputColumns, ...shape.suggestedOutputColumns],
+					workflowForSamples: wf,
+				});
+				dataTableId = dt.id;
+				datasetChoiceForTask = 'link-existing';
+			}
 
 			const task = formatEvalSetupTask({
 				workflowId: input.workflowId,
 				workflowName: wf.name ?? 'Workflow',
 				detectedAiNodes: detection.aiNodeNames,
-				datasetChoice,
-				existingDataTableId: input.existingDataTableId,
+				datasetChoice: datasetChoiceForTask,
+				existingDataTableId: dataTableId,
 				projectId: input.projectId,
 				suggestedInputColumns: shape.suggestedInputColumns,
 				suggestedOutputColumns: shape.suggestedOutputColumns,
@@ -216,7 +218,7 @@ export function createEvalsTool(context: InstanceAiContext) {
 				task,
 				workflowId: input.workflowId,
 				...(input.projectId ? { projectId: input.projectId } : {}),
-				...(input.existingDataTableId ? { dataTableId: input.existingDataTableId } : {}),
+				...(dataTableId ? { dataTableId } : {}),
 			};
 		},
 	});

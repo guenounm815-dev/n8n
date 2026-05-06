@@ -251,7 +251,7 @@ describe('getSystemPrompt', () => {
 			expect(prompt).toContain('aiNodeNames');
 			expect(prompt).toContain('evals(action="propose", workflowId, projectId)');
 			expect(prompt).toContain('eval-setup-with-agent');
-			expect(prompt).toContain('eval-data');
+			expect(prompt).toContain('Do NOT call `eval-data` separately');
 		});
 
 		it('renumbers the test/publish steps to 5 and 6', () => {
@@ -269,22 +269,12 @@ describe('getSystemPrompt', () => {
 			expect(prompt).toContain('Failures within step 4 are non-fatal');
 			expect(prompt).toContain('continue to step 5 silently');
 			expect(prompt).toContain("Couldn't add eval suite");
-			expect(prompt).toContain('Eval nodes are set up but sample rows');
 		});
 
-		it('treats no-ai-nodes and already-configured as silent skip', () => {
+		it('treats every `eligible: false` reason as silent skip', () => {
 			const prompt = getSystemPrompt({});
 
-			expect(prompt).toContain('`no-ai-nodes` or `already-configured` → skip silently');
-		});
-
-		it('surfaces ONE sentence to the user when reason is root-agent-reads-other-node', () => {
-			const prompt = getSystemPrompt({});
-
-			expect(prompt).toContain('`root-agent-reads-other-node`');
-			expect(prompt).toContain('surface ONE brief sentence');
-			expect(prompt).toContain("EvaluationTrigger can't bypass");
-			expect(prompt).toContain('Do NOT call any other tool, do NOT retry');
+			expect(prompt).toMatch(/skip silently and continue with step 5/);
 		});
 
 		it('respects prior user intent to skip evals', () => {

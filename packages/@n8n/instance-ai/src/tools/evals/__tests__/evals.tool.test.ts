@@ -24,6 +24,12 @@ jest.mock('../infer-eval-shape.service', () => ({
 	},
 }));
 
+// Stub the inline DataTable creation+population so propose tests stay
+// hermetic — the service otherwise calls generateSampleRows (real LLM).
+jest.mock('../generate-sample-rows.service', () => ({
+	generateSampleRows: jest.fn().mockResolvedValue([]),
+}));
+
 const mockInfer = inferEvalShape as jest.MockedFunction<typeof inferEvalShape>;
 
 function aiWf(): WorkflowJSON {
@@ -54,8 +60,15 @@ function aiWf(): WorkflowJSON {
 function makeCtx(wf: WorkflowJSON): InstanceAiContext {
 	const ctx = mock<InstanceAiContext>();
 	ctx.workflowService.getAsWorkflowJSON = jest.fn().mockResolvedValue(wf);
-	ctx.dataTableService.create = jest.fn();
-	ctx.dataTableService.insertRows = jest.fn();
+	// Default `propose` behavior generates a DataTable inline. Stub the
+	// service so it returns a plausible DataTable; tests that exercise the
+	// generation path can assert against these mocks.
+	ctx.dataTableService.create = jest
+		.fn()
+		.mockResolvedValue({ id: 'dt-new', name: 'Test — eval samples', columns: [] });
+	ctx.dataTableService.insertRows = jest
+		.fn()
+		.mockResolvedValue({ insertedCount: 0, dataTableId: 'dt-new', tableName: 'x', projectId: 'p' });
 	// `jest-mock-extended` auto-stubs every property proxy-style, but the
 	// Mastra logger is used via optional chaining (`ctx.logger?.info(...)`)
 	// which short-circuits on `undefined` yet throws on "logger exists but
@@ -142,42 +155,6 @@ describe('evalsTool — propose gate checks', () => {
 			reason: expect.stringMatching(/already/i) as unknown,
 		});
 	});
-
-	it('returns skipped when a root agent reads another node JSON directly', async () => {
-		const wf = {
-			name: 'Reads Trigger',
-			nodes: [
-				{
-					id: '1',
-					name: 'Telegram Trigger',
-					type: 'n8n-nodes-base.telegramTrigger',
-					typeVersion: 1,
-					position: [0, 0],
-					parameters: {},
-				},
-				{
-					id: '2',
-					name: 'Agent',
-					type: '@n8n/n8n-nodes-langchain.agent',
-					typeVersion: 1,
-					position: [200, 0],
-					parameters: { text: "={{ $('Telegram Trigger').item.json.message.text }}" },
-				},
-			],
-			connections: {},
-		} as unknown as WorkflowJSON;
-		const ctx = makeCtx(wf);
-		const tool = createEvalsTool(ctx);
-
-		const result = (await tool.execute!({ action: 'propose', workflowId: 'w1' }, {
-			agent: {},
-		} as never)) as Record<string, unknown>;
-
-		expect(result).toMatchObject({
-			skipped: true,
-			reason: expect.stringMatching(/topology-only/i) as unknown,
-		});
-	});
 });
 
 describe('evalsTool — delegates to eval-setup-agent', () => {
@@ -192,17 +169,22 @@ describe('evalsTool — delegates to eval-setup-agent', () => {
 			agent: {},
 		} as never)) as Record<string, unknown>;
 
-		expect(ctx.dataTableService.create).not.toHaveBeenCalled();
-		expect(ctx.dataTableService.insertRows).not.toHaveBeenCalled();
+		// Default datasetChoice is `generate` — propose creates AND populates
+		// the DataTable inline before delegating to the sub-agent.
+		expect(ctx.dataTableService.create).toHaveBeenCalledTimes(1);
+		expect(ctx.dataTableService.insertRows).toHaveBeenCalledTimes(1);
 		expect(result).toMatchObject({
 			success: true,
 			shouldDelegateToEvalSetupAgent: true,
 			workflowId: 'w1',
 			projectId: 'p1',
+			dataTableId: 'dt-new',
 		});
 		const task = result.task as string;
-		expect(task).toContain('Create an empty DataTable');
-		expect(task).toContain('Do not insert rows');
+		// Sub-agent gets a `link-existing` task pointing at the freshly
+		// created DataTable — it should NOT create another one.
+		expect(task).toContain('dt-new');
+		expect(task).toContain('already exists');
 		expect(task).toContain('- input');
 		expect(task).toContain('- expected_output');
 	});
@@ -366,41 +348,6 @@ describe('evalsTool — action: offer (proactive approve/deny widget)', () => {
 		} as never)) as Record<string, unknown>;
 
 		expect(result).toEqual({ eligible: false, reason: 'already-configured' });
-		expect(suspend).not.toHaveBeenCalled();
-	});
-
-	it('returns eligible:false with reason root-agent-reads-other-node and never suspends', async () => {
-		const wf = {
-			name: 'Reads Trigger',
-			nodes: [
-				{
-					id: '1',
-					name: 'Telegram Trigger',
-					type: 'n8n-nodes-base.telegramTrigger',
-					typeVersion: 1,
-					position: [0, 0],
-					parameters: {},
-				},
-				{
-					id: '2',
-					name: 'Agent',
-					type: '@n8n/n8n-nodes-langchain.agent',
-					typeVersion: 1,
-					position: [200, 0],
-					parameters: { text: "={{ $('Telegram Trigger').item.json.message.text }}" },
-				},
-			],
-			connections: {},
-		} as unknown as WorkflowJSON;
-		const ctx = makeCtx(wf);
-		const tool = createEvalsTool(ctx);
-		const suspend = jest.fn();
-
-		const result = (await tool.execute!({ action: 'offer', workflowId: 'w1' }, {
-			agent: { suspend, resumeData: undefined },
-		} as never)) as Record<string, unknown>;
-
-		expect(result).toEqual({ eligible: false, reason: 'root-agent-reads-other-node' });
 		expect(suspend).not.toHaveBeenCalled();
 	});
 

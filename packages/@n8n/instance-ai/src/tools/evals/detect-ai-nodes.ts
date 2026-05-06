@@ -6,16 +6,15 @@ const EVALUATION_TYPES = new Set<string>([
 	'n8n-nodes-base.evaluationTrigger',
 ]);
 
+// Langchain nodes that are SUB-COMPONENTS (chat models, memory, embeddings,
+// tools, triggers) — they hang off a root agent and are not themselves the
+// thing we evaluate. Detection treats only root agents as "AI nodes".
 const NON_ROOT_TYPE_PARTS = ['trigger', 'lm', 'model', 'embedding', 'memory', 'tool'];
-
-const NODE_JSON_REFERENCE_REGEX =
-	/\$\((?:"([^"]+)"|'([^']+)')\)\.(?:item|first\(\)|last\(\))\.json\b|\$node\[(?:"([^"]+)"|'([^']+)')\]\.json\b/;
 
 export interface DetectAiNodesResult {
 	isAiWorkflow: boolean;
 	aiNodeNames: string[];
 	alreadyConfigured: boolean;
-	rootAgentReadsOtherNode: boolean;
 }
 
 function isRootAgentType(type: string): boolean {
@@ -24,41 +23,17 @@ function isRootAgentType(type: string): boolean {
 	return !NON_ROOT_TYPE_PARTS.some((part) => lower.includes(part));
 }
 
-function collectStrings(value: unknown, sink: string[]): void {
-	if (typeof value === 'string') {
-		sink.push(value);
-		return;
-	}
-	if (Array.isArray(value)) {
-		for (const v of value) collectStrings(v, sink);
-		return;
-	}
-	if (value && typeof value === 'object') {
-		for (const v of Object.values(value)) collectStrings(v, sink);
-	}
-}
-
-function paramsReferenceOtherNode(parameters: unknown): boolean {
-	const strings: string[] = [];
-	collectStrings(parameters, strings);
-	return strings.some((s) => NODE_JSON_REFERENCE_REGEX.test(s));
-}
-
 export function detectAiNodes(workflow: WorkflowJSON): DetectAiNodesResult {
 	const aiNodeNames: string[] = [];
 	let alreadyConfigured = false;
-	let rootAgentReadsOtherNode = false;
 
 	for (const node of workflow.nodes ?? []) {
 		if (!node.name) continue;
-		if (node.type.startsWith(LANGCHAIN_TYPE_PREFIX)) {
+		if (isRootAgentType(node.type)) {
 			aiNodeNames.push(node.name);
 		}
 		if (EVALUATION_TYPES.has(node.type)) {
 			alreadyConfigured = true;
-		}
-		if (isRootAgentType(node.type) && paramsReferenceOtherNode(node.parameters)) {
-			rootAgentReadsOtherNode = true;
 		}
 	}
 
@@ -66,6 +41,5 @@ export function detectAiNodes(workflow: WorkflowJSON): DetectAiNodesResult {
 		isAiWorkflow: aiNodeNames.length > 0,
 		aiNodeNames,
 		alreadyConfigured,
-		rootAgentReadsOtherNode,
 	};
 }

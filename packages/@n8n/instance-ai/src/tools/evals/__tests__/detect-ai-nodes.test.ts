@@ -40,61 +40,53 @@ describe('detectAiNodes', () => {
 		expect(result.aiNodeNames).toEqual([]);
 	});
 
-	it('collects all langchain node names', () => {
+	it('collects only root agent names — sub-components (memory, models, tools) are excluded', () => {
 		const result = detectAiNodes(
 			wf([
 				{ name: 'Agent', type: '@n8n/n8n-nodes-langchain.agent' },
 				{ name: 'Memory', type: '@n8n/n8n-nodes-langchain.memoryBufferWindow' },
+				{ name: 'Chat Model', type: '@n8n/n8n-nodes-langchain.lmChatOpenAi' },
+				{ name: 'Search Tool', type: '@n8n/n8n-nodes-langchain.toolSerpApi' },
+				{ name: 'Embeddings', type: '@n8n/n8n-nodes-langchain.embeddingsOpenAi' },
 				{ name: 'HTTP', type: 'n8n-nodes-base.httpRequest' },
 			]),
 		);
-		expect(result.aiNodeNames).toEqual(['Agent', 'Memory']);
+		expect(result.aiNodeNames).toEqual(['Agent']);
 	});
 
-	it('flags root agents that read another node JSON', () => {
+	it('collects multiple root agents in a multi-agent workflow', () => {
 		const result = detectAiNodes(
 			wf([
-				{ name: 'Telegram Trigger', type: 'n8n-nodes-base.telegramTrigger' },
-				{
-					name: 'Agent',
-					type: '@n8n/n8n-nodes-langchain.agent',
-					parameters: {
-						text: "={{ $('Telegram Trigger').item.json.message.text }}",
-					},
-				},
+				{ name: 'Categorizer Agent', type: '@n8n/n8n-nodes-langchain.agent' },
+				{ name: 'Chat Model', type: '@n8n/n8n-nodes-langchain.lmChatOpenAi' },
+				{ name: 'Responder Agent', type: '@n8n/n8n-nodes-langchain.agent' },
 			]),
 		);
-		expect(result.rootAgentReadsOtherNode).toBe(true);
+		expect(result.aiNodeNames).toEqual(['Categorizer Agent', 'Responder Agent']);
 	});
 
-	it('does not flag root agents that only read $json', () => {
+	it('flags alreadyConfigured when an EvaluationTrigger is present', () => {
 		const result = detectAiNodes(
 			wf([
-				{
-					name: 'Agent',
-					type: '@n8n/n8n-nodes-langchain.agent',
-					parameters: { text: '={{ $json.input }}' },
-				},
+				{ name: 'Agent', type: '@n8n/n8n-nodes-langchain.agent' },
+				{ name: 'EvalTrigger', type: 'n8n-nodes-base.evaluationTrigger' },
 			]),
 		);
-		expect(result.rootAgentReadsOtherNode).toBe(false);
+		expect(result.alreadyConfigured).toBe(true);
 	});
 
-	it('ignores node JSON references from non-root langchain nodes (e.g. tools)', () => {
+	it('flags alreadyConfigured when an Evaluation node is present', () => {
 		const result = detectAiNodes(
 			wf([
-				{
-					name: 'HttpTool',
-					type: '@n8n/n8n-nodes-langchain.httpRequestTool',
-					parameters: { url: "={{ $('Workflow Configuration').item.json.targetUrl }}" },
-				},
-				{
-					name: 'Agent',
-					type: '@n8n/n8n-nodes-langchain.agent',
-					parameters: { text: '={{ $json.input }}' },
-				},
+				{ name: 'Agent', type: '@n8n/n8n-nodes-langchain.agent' },
+				{ name: 'Eval', type: 'n8n-nodes-base.evaluation' },
 			]),
 		);
-		expect(result.rootAgentReadsOtherNode).toBe(false);
+		expect(result.alreadyConfigured).toBe(true);
+	});
+
+	it('does not flag alreadyConfigured for a clean AI workflow', () => {
+		const result = detectAiNodes(wf([{ name: 'Agent', type: '@n8n/n8n-nodes-langchain.agent' }]));
+		expect(result.alreadyConfigured).toBe(false);
 	});
 });
