@@ -1,5 +1,6 @@
 import startCase from 'lodash/startCase';
-import type { JsonValue } from 'n8n-workflow';
+import type { INodeUi } from '@/Interface';
+import { EVALUATION_NODE_TYPE, EVALUATION_TRIGGER_NODE_TYPE, type JsonValue } from 'n8n-workflow';
 import type { TestCaseExecutionRecord, TestRunRecord } from './evaluation.api';
 import type { TestTableColumn } from './components/shared/TestTableBase.vue';
 
@@ -31,6 +32,65 @@ export type MetricSource = {
 	category: MetricCategory;
 	nodeName: string;
 };
+
+const LANGCHAIN_TYPE_PREFIX = '@n8n/n8n-nodes-langchain.';
+const NON_ROOT_TYPE_PARTS = ['trigger', 'lm', 'model', 'embedding', 'memory', 'tool'];
+const NODE_JSON_REFERENCE_REGEX =
+	/\$\((?:"([^"]+)"|'([^']+)')\)\.(?:item|first\(\)|last\(\))\.json\b|\$node\[(?:"([^"]+)"|'([^']+)')\]\.json\b/;
+
+function isRootAgentType(type: string): boolean {
+	if (!type.startsWith(LANGCHAIN_TYPE_PREFIX)) return false;
+	const lower = type.toLowerCase();
+	return !NON_ROOT_TYPE_PARTS.some((part) => lower.includes(part));
+}
+
+function collectStrings(value: unknown, sink: string[]): void {
+	if (typeof value === 'string') {
+		sink.push(value);
+		return;
+	}
+	if (Array.isArray(value)) {
+		for (const v of value) collectStrings(v, sink);
+		return;
+	}
+	if (value && typeof value === 'object') {
+		for (const v of Object.values(value)) collectStrings(v, sink);
+	}
+}
+
+function paramsReferenceOtherNode(parameters: unknown): boolean {
+	const strings: string[] = [];
+	collectStrings(parameters, strings);
+	return strings.some((s) => NODE_JSON_REFERENCE_REGEX.test(s));
+}
+
+/**
+ * Mirrors the eligibility check in
+ * `packages/@n8n/instance-ai/src/tools/evals/detect-ai-nodes.ts`.
+ * A workflow is eligible for the in-canvas evals hint when it contains at least
+ * one langchain node, has no existing Evaluation/EvaluationTrigger node, and no
+ * root agent reads JSON directly from another node.
+ */
+export function isEligibleForEvalsHint(nodes: INodeUi[]): boolean {
+	let hasAiNode = false;
+	let alreadyConfigured = false;
+	let rootAgentReadsOtherNode = false;
+
+	for (const node of nodes) {
+		if (!node.name) continue;
+		if (node.type.startsWith(LANGCHAIN_TYPE_PREFIX)) {
+			hasAiNode = true;
+		}
+		if (node.type === EVALUATION_NODE_TYPE || node.type === EVALUATION_TRIGGER_NODE_TYPE) {
+			alreadyConfigured = true;
+		}
+		if (isRootAgentType(node.type) && paramsReferenceOtherNode(node.parameters)) {
+			rootAgentReadsOtherNode = true;
+		}
+	}
+
+	return hasAiNode && !alreadyConfigured && !rootAgentReadsOtherNode;
+}
 
 export const SHORT_TABLE_CELL_MIN_WIDTH = 125;
 const LONG_TABLE_CELL_MIN_WIDTH = 250;

@@ -18,8 +18,20 @@ import {
 	getTestTableHeaders,
 	getUserDefinedMetricNames,
 	normalizeMetricValue,
+	isEligibleForEvalsHint,
 } from './evaluation.utils';
 import type { TestCaseExecutionRecord } from './evaluation.api';
+import type { INodeUi } from '@/Interface';
+
+function makeNode(partial: Partial<INodeUi> & { type: string; name: string }): INodeUi {
+	return {
+		id: partial.name,
+		typeVersion: 1,
+		position: [0, 0],
+		parameters: {},
+		...partial,
+	} as INodeUi;
+}
 
 describe('utils', () => {
 	describe('applyCachedSortOrder', () => {
@@ -1428,6 +1440,92 @@ describe('utils', () => {
 			expect(getMetricCategory('customMetrics')).toBe('custom');
 			expect(getMetricCategory(undefined)).toBe('custom');
 			expect(getMetricCategory('madeUpType')).toBe('custom');
+		});
+	});
+
+	describe('isEligibleForEvalsHint', () => {
+		it('returns false for an empty workflow', () => {
+			expect(isEligibleForEvalsHint([])).toBe(false);
+		});
+
+		it('returns false when no langchain nodes are present', () => {
+			const nodes = [
+				makeNode({ name: 'HTTP', type: 'n8n-nodes-base.httpRequest' }),
+				makeNode({ name: 'Set', type: 'n8n-nodes-base.set' }),
+			];
+			expect(isEligibleForEvalsHint(nodes)).toBe(false);
+		});
+
+		it('returns true for a workflow with a root agent and no eval nodes', () => {
+			const nodes = [
+				makeNode({ name: 'Trigger', type: 'n8n-nodes-base.manualTrigger' }),
+				makeNode({ name: 'Agent', type: '@n8n/n8n-nodes-langchain.agent' }),
+				makeNode({ name: 'OpenAI', type: '@n8n/n8n-nodes-langchain.lmChatOpenAi' }),
+			];
+			expect(isEligibleForEvalsHint(nodes)).toBe(true);
+		});
+
+		it('returns false when an EvaluationTrigger is already present', () => {
+			const nodes = [
+				makeNode({ name: 'EvalTrigger', type: 'n8n-nodes-base.evaluationTrigger' }),
+				makeNode({ name: 'Agent', type: '@n8n/n8n-nodes-langchain.agent' }),
+			];
+			expect(isEligibleForEvalsHint(nodes)).toBe(false);
+		});
+
+		it('returns false when an Evaluation node is already present', () => {
+			const nodes = [
+				makeNode({ name: 'Eval', type: 'n8n-nodes-base.evaluation' }),
+				makeNode({ name: 'Agent', type: '@n8n/n8n-nodes-langchain.agent' }),
+			];
+			expect(isEligibleForEvalsHint(nodes)).toBe(false);
+		});
+
+		it('returns false when a root agent reads JSON from another node via $()', () => {
+			const nodes = [
+				makeNode({
+					name: 'Agent',
+					type: '@n8n/n8n-nodes-langchain.agent',
+					parameters: {
+						text: "={{ $('Other').item.json.input }}",
+					},
+				}),
+			];
+			expect(isEligibleForEvalsHint(nodes)).toBe(false);
+		});
+
+		it('returns false when a root agent reads JSON via $node[]', () => {
+			const nodes = [
+				makeNode({
+					name: 'Agent',
+					type: '@n8n/n8n-nodes-langchain.agent',
+					parameters: {
+						text: '={{ $node["Other"].json.input }}',
+					},
+				}),
+			];
+			expect(isEligibleForEvalsHint(nodes)).toBe(false);
+		});
+
+		it('does not flag non-root langchain nodes (lm/memory/tool/embedding) when they reference other nodes', () => {
+			// A chat model that references another node is NOT a root agent —
+			// the rootAgentReadsOtherNode guard must skip it.
+			const nodes = [
+				makeNode({ name: 'Agent', type: '@n8n/n8n-nodes-langchain.agent' }),
+				makeNode({
+					name: 'Model',
+					type: '@n8n/n8n-nodes-langchain.lmChatOpenAi',
+					parameters: { prompt: "={{ $('Other').item.json.text }}" },
+				}),
+			];
+			expect(isEligibleForEvalsHint(nodes)).toBe(true);
+		});
+
+		it('returns false when only sub-langchain nodes exist without a root agent', () => {
+			// Edge case: workflow has lmChatOpenAi (langchain prefix) but no root
+			// agent. We still consider it eligible because the prefix is the gate.
+			const nodes = [makeNode({ name: 'Model', type: '@n8n/n8n-nodes-langchain.lmChatOpenAi' })];
+			expect(isEligibleForEvalsHint(nodes)).toBe(true);
 		});
 	});
 });

@@ -1,0 +1,153 @@
+{
+	"passed": false,
+	"results": [
+		{
+			"caseSlug": "slack-summarizer",
+			"prompt": "Build me a workflow that fetches messages from Slack channel #engineering for the past 24 hours and uses an AI agent to summarize them, then sends the summary back to me on Slack.",
+			"expectsOffer": true,
+			"offerDetected": false,
+			"workflowBuilt": false,
+			"findings": [
+				{
+					"severity": "error",
+					"code": "workflow_not_built",
+					"message": "No workflow id surfaced from the build outcome — the build did not complete (test cannot verify offer behavior)."
+				}
+			],
+			"passed": false
+		},
+		{
+			"caseSlug": "gmail-categorizer",
+			"prompt": "Create a workflow that watches my Gmail inbox and uses AI to categorize each new message into one of the labels: Work, Personal, Newsletter, Spam.",
+			"expectsOffer": true,
+			"offerDetected": true,
+			"workflowBuilt": true,
+			"workflowId": "tWMUqlYuf0qZ0iWA",
+			"findings": [],
+			"passed": true
+		},
+		{
+			"caseSlug": "telegram-calendar-bot",
+			"prompt": "Make a Telegram bot that, when I send it a question about my schedule, looks up my Google Calendar events and answers using AI.",
+			"expectsOffer": true,
+			"offerDetected": false,
+			"workflowBuilt": true,
+			"workflowId": "SZCUwvWC17S62do8",
+			"findings": [
+				{
+					"severity": "error",
+					"code": "offer_widget_missing",
+					"message": "Workflow built but Instance AI did not surface the eval offer widget (`Generate an eval suite for ...`) before settling."
+				}
+			],
+			"passed": false
+		},
+		{
+			"caseSlug": "rss-news-summary",
+			"prompt": "Every weekday morning at 8am, fetch articles from a list of RSS feeds, use AI to write a single concise news brief, and send it to me by email.",
+			"expectsOffer": true,
+			"offerDetected": false,
+			"workflowBuilt": false,
+			"findings": [
+				{
+					"severity": "error",
+					"code": "workflow_not_built",
+					"message": "No workflow id surfaced from the build outcome — the build did not complete (test cannot verify offer behavior)."
+				}
+			],
+			"passed": false
+		},
+		{
+			"caseSlug": "support-draft-response",
+			"prompt": "Build a workflow that, when a new support ticket arrives via webhook, uses an AI agent to draft a friendly response and saves the draft to a Google Doc for review.",
+			"expectsOffer": true,
+			"offerDetected": false,
+			"workflowBuilt": false,
+			"findings": [
+				{
+					"severity": "error",
+					"code": "workflow_not_built",
+					"message": "No workflow id surfaced from the build outcome — the build did not complete (test cannot verify offer behavior)."
+				}
+			],
+			"passed": false
+		},
+		{
+			"caseSlug": "pdf-data-extraction",
+			"prompt": "Create a workflow that, when a PDF is uploaded to a folder, uses AI to extract structured data (invoice number, total, date) and appends it as a row to a Google Sheet.",
+			"expectsOffer": true,
+			"offerDetected": false,
+			"workflowBuilt": false,
+			"findings": [
+				{
+					"severity": "error",
+					"code": "workflow_not_built",
+					"message": "No workflow id surfaced from the build outcome — the build did not complete (test cannot verify offer behavior)."
+				}
+			],
+			"passed": false
+		},
+		{
+			"caseSlug": "chat-with-database",
+			"prompt": "Set up a chat trigger workflow where users can ask natural-language questions about a Postgres database and an AI agent answers them by querying the right tables.",
+			"expectsOffer": true,
+			"offerDetected": false,
+			"workflowBuilt": false,
+			"findings": [
+				{
+					"severity": "error",
+					"code": "workflow_not_built",
+					"message": "No workflow id surfaced from the build outcome — the build did not complete (test cannot verify offer behavior)."
+				}
+			],
+			"passed": false
+		},
+		{
+			"caseSlug": "whatsapp-auto-reply",
+			"prompt": "Build a workflow that monitors WhatsApp messages and uses an AI agent to draft a polite auto-reply when I am out of office, then sends it.",
+			"expectsOffer": true,
+			"offerDetected": false,
+			"workflowBuilt": false,
+			"findings": [
+				{
+					"severity": "error",
+					"code": "workflow_not_built",
+					"message": "No workflow id surfaced from the build outcome — the build did not complete (test cannot verify offer behavior)."
+				}
+			],
+			"passed": false
+		},
+		{
+			"caseSlug": "weekly-content-recap",
+			"prompt": "Every Friday at 5pm, gather all blog posts published this week from a Notion database, use AI to write a short recap, and post it to Slack.",
+			"expectsOffer": true,
+			"offerDetected": false,
+			"workflowBuilt": true,
+			"workflowId": "oDsRW8ZOpOgG7HRk",
+			"findings": [
+				{
+					"severity": "error",
+					"code": "offer_widget_missing",
+					"message": "Workflow built but Instance AI did not surface the eval offer widget (`Generate an eval suite for ...`) before settling."
+				}
+			],
+			"passed": false
+		},
+		{
+			"caseSlug": "sheets-to-notion-sync",
+			"prompt": "Every day at 9am, copy newly added rows from a Google Sheet into a Notion database. No AI processing — just a direct sync.",
+			"expectsOffer": false,
+			"offerDetected": false,
+			"workflowBuilt": false,
+			"findings": [
+				{
+					"severity": "error",
+					"code": "runner_error",
+					"message": "Timed out after 600000ms waiting for thread eval-proactive-offer-eae99fef-8a9b-46ab-9033-abd00fb232a6 to settle"
+				}
+			],
+			"passed": false,
+			"error": "Timed out after 600000ms waiting for thread eval-proactive-offer-eae99fef-8a9b-46ab-9033-abd00fb232a6 to settle"
+		}
+	]
+}

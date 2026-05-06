@@ -302,6 +302,17 @@ describe('getSystemPrompt', () => {
 			expect(prompt).toContain('strict approve/deny widget');
 			expect(prompt).toContain('run the offer flow for the first one only');
 		});
+
+		it('promotes the synthesize eval offer to its own REQUIRED block with strong directive language', () => {
+			const prompt = getSystemPrompt({});
+
+			expect(prompt).toContain(
+				'**Synthesize fresh-build eval offer (REQUIRED step before ending the turn):**',
+			);
+			expect(prompt).toContain('you MUST call `evals(action="offer", workflowId, projectId)`');
+			expect(prompt).toContain('This is not optional');
+			expect(prompt).toContain('most common reason users miss the eval feature');
+		});
 	});
 
 	describe('multi-credential disambiguation guidance', () => {
