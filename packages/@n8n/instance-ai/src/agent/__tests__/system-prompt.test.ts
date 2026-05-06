@@ -225,7 +225,66 @@ describe('getSystemPrompt', () => {
 			expect(prompt).toContain('`shouldDelegateToEvalSetupAgent: true`');
 			expect(prompt).toContain('call `eval-setup-with-agent`');
 			expect(prompt).toContain('Do NOT call `build-workflow-with-agent` for this case');
-			expect(prompt).not.toContain('eval-data');
+		});
+
+		it('cross-references the proactive fresh-build offer in the Add-evals header', () => {
+			const prompt = getSystemPrompt({});
+
+			expect(prompt).toMatch(
+				/for proactive offering after a fresh build, see \*\*Post-build flow\*\* step 4/,
+			);
+		});
+	});
+
+	describe('fresh-build eval suite offer', () => {
+		it('inserts the offer as Post-build flow step 4 with a check → ask-user → propose chain', () => {
+			const prompt = getSystemPrompt({});
+
+			expect(prompt).toContain('**Fresh-build eval suite offer.**');
+			expect(prompt).toContain('did NOT pass an existing `workflowId`');
+			expect(prompt).toContain('evals(action="check", workflowId)');
+			expect(prompt).toContain('`eligible: false`');
+			expect(prompt).toContain('`eligible: true`');
+			expect(prompt).toContain('aiNodeNames');
+			expect(prompt).toContain('evals(action="propose", workflowId, projectId)');
+			expect(prompt).toContain('eval-setup-with-agent');
+			expect(prompt).toContain('eval-data');
+		});
+
+		it('renumbers the test/publish steps to 5 and 6', () => {
+			const prompt = getSystemPrompt({});
+
+			expect(prompt).toMatch(/5\. Ask the user if they want to test the workflow/);
+			expect(prompt).toMatch(
+				/6\. Only call `workflows\(action="publish"\)` when the user explicitly asks to publish/,
+			);
+		});
+
+		it('declares the offer flow non-fatal on every chain failure', () => {
+			const prompt = getSystemPrompt({});
+
+			expect(prompt).toContain('Failures within step 4 are non-fatal');
+			expect(prompt).toContain('treat as `eligible: false`');
+			expect(prompt).toContain("Couldn't add eval suite");
+			expect(prompt).toContain('Eval nodes are set up but sample rows');
+		});
+
+		it('respects prior user intent to skip evals', () => {
+			const prompt = getSystemPrompt({});
+
+			expect(prompt).toContain(
+				"the user previously said in this conversation that they don't want evals",
+			);
+		});
+
+		it('extends the synthesize follow-up with the same offer for the first eligible workflow', () => {
+			const prompt = getSystemPrompt({});
+
+			expect(prompt).toMatch(/Before writing the completion message.*evals\(action="check"/s);
+			expect(prompt).toContain(
+				'same fresh-build eval suite offer as **Post-build flow** step 4 (c–g)',
+			);
+			expect(prompt).toContain('run the offer flow for the first one only');
 		});
 	});
 

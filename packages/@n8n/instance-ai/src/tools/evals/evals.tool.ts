@@ -37,17 +37,24 @@ async function deriveShapeFromDataTable(
 }
 
 const inputSchema = z.object({
-	action: z.literal('propose').describe('Propose an evaluation setup for an AI workflow'),
+	action: z
+		.enum(['propose', 'check'])
+		.describe(
+			'`check` = cheap eligibility precheck (no LLM calls, no side effects); ' +
+				'`propose` = build a full eval-setup task to delegate to `eval-setup-with-agent`.',
+		),
 	workflowId: z.string().describe('ID of the workflow'),
 	projectId: z
 		.string()
 		.optional()
-		.describe('Project ID (forwarded to the eval-setup-agent for DataTable creation)'),
+		.describe(
+			'Project ID — forwarded to the eval-setup-agent for DataTable creation. Used by `propose` only.',
+		),
 	datasetChoice: z
 		.enum(['create-empty', 'link-existing', 'later'])
 		.optional()
 		.describe(
-			'Dataset strategy. Default `create-empty` — sub-agent creates a fresh empty DataTable. ' +
+			'Dataset strategy (used by `propose` only). Default `create-empty` — sub-agent creates a fresh empty DataTable. ' +
 				'Use `link-existing` when the user references an existing DataTable (must pass `existingDataTableId`). ' +
 				'Use `later` when the user explicitly wants to wire the dataset themselves.',
 		),
@@ -55,7 +62,7 @@ const inputSchema = z.object({
 		.string()
 		.optional()
 		.describe(
-			'Required when `datasetChoice="link-existing"`. The DataTable id to wire into the EvaluationTrigger.',
+			'Required when `datasetChoice="link-existing"` (used by `propose` only). The DataTable id to wire into the EvaluationTrigger.',
 		),
 });
 
@@ -65,11 +72,23 @@ export function createEvalsTool(context: InstanceAiContext) {
 	return createTool({
 		id: 'evals',
 		description:
-			'Propose an evaluation setup for any workflow containing AI/LLM nodes. Call this when the user explicitly asks to add evaluations to an existing workflow. Returns a task for the orchestrator to pass to `eval-setup-with-agent`.',
+			"Check eligibility (`action='check'`, cheap precheck — no LLM calls) or propose a full evaluation setup (`action='propose'`). Use `check` proactively after a fresh AI workflow build to gate an eval-suite offer to the user; use `propose` when the user explicitly accepts the offer or asks to add evals to an existing workflow.",
 		inputSchema,
 		execute: async (input: Input) => {
 			const wf = await context.workflowService.getAsWorkflowJSON(input.workflowId);
 			const detection = detectAiNodes(wf);
+
+			if (input.action === 'check') {
+				if (!detection.isAiWorkflow) return { eligible: false, reason: 'no-ai-nodes' as const };
+				if (detection.alreadyConfigured) {
+					return { eligible: false, reason: 'already-configured' as const };
+				}
+				if (detection.rootAgentReadsOtherNode) {
+					return { eligible: false, reason: 'root-agent-reads-other-node' as const };
+				}
+				return { eligible: true as const, aiNodeNames: detection.aiNodeNames };
+			}
+
 			if (!detection.isAiWorkflow) {
 				return { skipped: true, reason: 'Workflow has no AI/LLM nodes.' };
 			}

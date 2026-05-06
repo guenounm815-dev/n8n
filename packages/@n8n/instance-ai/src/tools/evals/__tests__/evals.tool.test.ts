@@ -303,3 +303,211 @@ describe('evalsTool — delegates to eval-setup-agent', () => {
 		expect(task).not.toContain('Metric B');
 	});
 });
+
+describe('evalsTool — action: check (eligibility precheck)', () => {
+	beforeEach(() => jest.clearAllMocks());
+
+	it('returns eligible:false with reason no-ai-nodes for a workflow without langchain nodes', async () => {
+		const wf = {
+			name: 'Plain',
+			nodes: [
+				{
+					id: '1',
+					name: 'T',
+					type: 'n8n-nodes-base.manualTrigger',
+					typeVersion: 1,
+					position: [0, 0],
+					parameters: {},
+				},
+			],
+			connections: {},
+		} as unknown as WorkflowJSON;
+		const ctx = makeCtx(wf);
+		const tool = createEvalsTool(ctx);
+
+		const result = (await tool.execute!({ action: 'check', workflowId: 'w1' }, {
+			agent: {},
+		} as never)) as Record<string, unknown>;
+
+		expect(result).toEqual({ eligible: false, reason: 'no-ai-nodes' });
+	});
+
+	it('returns eligible:false with reason already-configured when EvaluationTrigger is present', async () => {
+		const wf = {
+			name: 'Already',
+			nodes: [
+				{
+					id: '1',
+					name: 'T',
+					type: 'n8n-nodes-base.manualTrigger',
+					typeVersion: 1,
+					position: [0, 0],
+					parameters: {},
+				},
+				{
+					id: '2',
+					name: 'Agent',
+					type: '@n8n/n8n-nodes-langchain.agent',
+					typeVersion: 1,
+					position: [200, 0],
+					parameters: {},
+				},
+				{
+					id: '3',
+					name: 'EvalT',
+					type: 'n8n-nodes-base.evaluationTrigger',
+					typeVersion: 1,
+					position: [0, -200],
+					parameters: {},
+				},
+			],
+			connections: {},
+		} as unknown as WorkflowJSON;
+		const ctx = makeCtx(wf);
+		const tool = createEvalsTool(ctx);
+
+		const result = (await tool.execute!({ action: 'check', workflowId: 'w1' }, {
+			agent: {},
+		} as never)) as Record<string, unknown>;
+
+		expect(result).toEqual({ eligible: false, reason: 'already-configured' });
+	});
+
+	it('returns eligible:false with reason already-configured when an Evaluation node is present', async () => {
+		const wf = {
+			name: 'Already',
+			nodes: [
+				{
+					id: '2',
+					name: 'Agent',
+					type: '@n8n/n8n-nodes-langchain.agent',
+					typeVersion: 1,
+					position: [0, 0],
+					parameters: {},
+				},
+				{
+					id: '3',
+					name: 'Eval',
+					type: 'n8n-nodes-base.evaluation',
+					typeVersion: 1,
+					position: [200, 0],
+					parameters: {},
+				},
+			],
+			connections: {},
+		} as unknown as WorkflowJSON;
+		const ctx = makeCtx(wf);
+		const tool = createEvalsTool(ctx);
+
+		const result = (await tool.execute!({ action: 'check', workflowId: 'w1' }, {
+			agent: {},
+		} as never)) as Record<string, unknown>;
+
+		expect(result).toEqual({ eligible: false, reason: 'already-configured' });
+	});
+
+	it('returns eligible:false with reason root-agent-reads-other-node when the agent reads upstream node JSON', async () => {
+		const wf = {
+			name: 'Reads Trigger',
+			nodes: [
+				{
+					id: '1',
+					name: 'Telegram Trigger',
+					type: 'n8n-nodes-base.telegramTrigger',
+					typeVersion: 1,
+					position: [0, 0],
+					parameters: {},
+				},
+				{
+					id: '2',
+					name: 'Agent',
+					type: '@n8n/n8n-nodes-langchain.agent',
+					typeVersion: 1,
+					position: [200, 0],
+					parameters: { text: "={{ $('Telegram Trigger').item.json.message.text }}" },
+				},
+			],
+			connections: {},
+		} as unknown as WorkflowJSON;
+		const ctx = makeCtx(wf);
+		const tool = createEvalsTool(ctx);
+
+		const result = (await tool.execute!({ action: 'check', workflowId: 'w1' }, {
+			agent: {},
+		} as never)) as Record<string, unknown>;
+
+		expect(result).toEqual({ eligible: false, reason: 'root-agent-reads-other-node' });
+	});
+
+	it('returns eligible:true with aiNodeNames for a clean AI workflow', async () => {
+		const ctx = makeCtx(aiWf());
+		const tool = createEvalsTool(ctx);
+
+		const result = (await tool.execute!({ action: 'check', workflowId: 'w1' }, {
+			agent: {},
+		} as never)) as Record<string, unknown>;
+
+		expect(result).toEqual({ eligible: true, aiNodeNames: ['Agent'] });
+	});
+
+	it('includes non-root langchain nodes (chat models, tools, memory) in aiNodeNames', async () => {
+		const wf = {
+			name: 'Multi',
+			nodes: [
+				{
+					id: '1',
+					name: 'T',
+					type: 'n8n-nodes-base.manualTrigger',
+					typeVersion: 1,
+					position: [0, 0],
+					parameters: {},
+				},
+				{
+					id: '2',
+					name: 'Agent',
+					type: '@n8n/n8n-nodes-langchain.agent',
+					typeVersion: 1,
+					position: [200, 0],
+					parameters: {},
+				},
+				{
+					id: '3',
+					name: 'Chat Model',
+					type: '@n8n/n8n-nodes-langchain.lmChatOpenAi',
+					typeVersion: 1,
+					position: [200, 200],
+					parameters: {},
+				},
+				{
+					id: '4',
+					name: 'Memory',
+					type: '@n8n/n8n-nodes-langchain.memoryBufferWindow',
+					typeVersion: 1,
+					position: [400, 200],
+					parameters: {},
+				},
+			],
+			connections: {},
+		} as unknown as WorkflowJSON;
+		const ctx = makeCtx(wf);
+		const tool = createEvalsTool(ctx);
+
+		const result = (await tool.execute!({ action: 'check', workflowId: 'w1' }, {
+			agent: {},
+		} as never)) as Record<string, unknown>;
+
+		expect(result).toMatchObject({ eligible: true });
+		expect((result as { aiNodeNames: string[] }).aiNodeNames).toEqual(
+			expect.arrayContaining(['Agent', 'Chat Model', 'Memory']),
+		);
+	});
+
+	it('does NOT invoke inferEvalShape — guards the cheap-precheck contract', async () => {
+		const ctx = makeCtx(aiWf());
+		const tool = createEvalsTool(ctx);
+
+		await tool.execute!({ action: 'check', workflowId: 'w1' }, { agent: {} } as never);
+
+		expect(mockInfer).not.toHaveBeenCalled();
+	});
+});
