@@ -19,6 +19,13 @@ export interface EvalDataTarget {
 	expectedOutputColumns: string[];
 	actualOutputColumns: string[];
 	metricNodeNames: string[];
+	/**
+	 * Pairs from setMetrics nodes: for each metric, the expected_* column
+	 * (read from the eval trigger row via `expectedAnswer`) and the agent
+	 * output field (read from $json via `actualAnswer`). Used by eval-data
+	 * to populate expected_* columns from a past execution's agent output.
+	 */
+	expectedToActualPairs: Array<{ expectedColumn: string; actualField: string }>;
 }
 
 export interface EvalDataRequirements {
@@ -117,6 +124,37 @@ function actualColumnsFromSetOutputs(nodes: WorkflowNode[]): string[] {
 	);
 }
 
+function pairsFromMetricNodes(
+	nodes: WorkflowNode[],
+): Array<{ expectedColumn: string; actualField: string }> {
+	const pairs: Array<{ expectedColumn: string; actualField: string }> = [];
+	for (const node of nodes) {
+		if (!nodeTypeEndsWith(node, 'evaluation') || readOperation(node) !== 'setMetrics') continue;
+		const parameters = node.parameters;
+		if (!isRecord(parameters)) continue;
+		const expectedRaw = parameters.expectedAnswer;
+		const actualRaw = parameters.actualAnswer;
+		if (typeof expectedRaw !== 'string' || typeof actualRaw !== 'string') continue;
+		const expectedRefs = extractJsonColumnRefs(expectedRaw).filter((ref) =>
+			ref.startsWith('expected'),
+		);
+		const actualRefs = extractJsonColumnRefs(actualRaw);
+		const len = Math.min(expectedRefs.length, actualRefs.length);
+		for (let i = 0; i < len; i++) {
+			pairs.push({ expectedColumn: expectedRefs[i], actualField: actualRefs[i] });
+		}
+	}
+	// Dedup by expectedColumn (last one wins). Multiple setMetrics nodes may
+	// reference the same expected column; the actualField mapping should be
+	// consistent in that case.
+	const map = new Map<string, string>();
+	for (const p of pairs) map.set(p.expectedColumn, p.actualField);
+	return [...map.entries()].map(([expectedColumn, actualField]) => ({
+		expectedColumn,
+		actualField,
+	}));
+}
+
 function firstReachableAgentName(
 	workflow: WorkflowJSON,
 	evalTriggerName: string,
@@ -164,6 +202,7 @@ export function analyzeEvalDataRequirements(workflow: WorkflowJSON): EvalDataReq
 				expectedOutputColumns: expectedColumnsFromMetricNodes(reachableNodes),
 				actualOutputColumns: actualColumnsFromSetOutputs(reachableNodes),
 				metricNodeNames,
+				expectedToActualPairs: pairsFromMetricNodes(reachableNodes),
 			},
 		];
 	});

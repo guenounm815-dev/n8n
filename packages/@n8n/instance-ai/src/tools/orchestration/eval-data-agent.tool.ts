@@ -20,7 +20,6 @@ const outputSchema = z.object({
 	rowCount: z.number().optional(),
 	source: z.enum(['history', 'synthetic']).optional(),
 	reason: z.string().optional(),
-	warningExpectedColumnsEmpty: z.array(z.string()).optional(),
 });
 
 export function createEvalDataAgentTool(context: OrchestrationContext) {
@@ -66,6 +65,7 @@ export function createEvalDataAgentTool(context: OrchestrationContext) {
 				workflowId: input.workflowId,
 				agentNodeName: target.targetAgentNodeName,
 				inputColumns: target.inputColumns,
+				expectedToActualPairs: target.expectedToActualPairs,
 			});
 
 			let rowsToInsert: Array<Record<string, unknown>>;
@@ -77,7 +77,7 @@ export function createEvalDataAgentTool(context: OrchestrationContext) {
 			} else {
 				rowsToInsert = await generateSampleRows({
 					workflow,
-					columns: target.inputColumns,
+					columns: [...target.inputColumns, ...target.expectedOutputColumns],
 					rowCount: GENERATE_ROW_COUNT,
 				});
 				source = 'synthetic';
@@ -89,14 +89,10 @@ export function createEvalDataAgentTool(context: OrchestrationContext) {
 				input.projectId ? { projectId: input.projectId } : undefined,
 			);
 
-			const warning =
-				target.expectedOutputColumns.length > 0 ? target.expectedOutputColumns : undefined;
-
 			return {
 				status: source === 'history' ? ('imported' as const) : ('generated' as const),
 				rowCount: rowsToInsert.length,
 				source,
-				...(warning ? { warningExpectedColumnsEmpty: warning } : {}),
 			};
 		},
 	});

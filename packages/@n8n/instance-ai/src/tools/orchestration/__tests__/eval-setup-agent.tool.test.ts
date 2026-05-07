@@ -10,7 +10,7 @@ jest.mock('@mastra/core/mastra', () => ({
 
 // Lazy-require because createEvalSetupAgentTool uses @mastra/core/tools (createTool)
 // which depends on Mastra internals — the mocks above must be in place first.
-const { createEmptyEvalDataTableTool, createEvalSetupAgentTool, evalSetupAgentInputSchema } =
+const { createEvalSetupAgentTool, evalSetupAgentInputSchema } =
 	// eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/consistent-type-imports
 	require('../eval-setup-agent.tool') as typeof import('../eval-setup-agent.tool');
 
@@ -73,42 +73,11 @@ describe('createEvalSetupAgentTool', () => {
 	});
 });
 
-describe('createEmptyEvalDataTableTool', () => {
-	it('creates a table with string columns and does not insert rows', async () => {
-		const context = {
-			dataTableService: {
-				create: jest.fn().mockResolvedValue({
-					id: 'dt-1',
-					name: 'Eval Dataset',
-					columns: [
-						{ id: 'c1', name: 'input', type: 'string' },
-						{ id: 'c2', name: 'expected_output', type: 'string' },
-					],
-				}),
-				insertRows: jest.fn(),
-			},
-		};
-		const tool = createEmptyEvalDataTableTool(context as never);
-
-		const result = await tool.execute!(
-			{
-				name: 'Eval Dataset',
-				projectId: 'p1',
-				columns: ['input', 'expected_output', 'input'],
-			},
-			{} as never,
-		);
-
-		expect(context.dataTableService.create).toHaveBeenCalledWith(
-			'Eval Dataset',
-			[
-				{ name: 'input', type: 'string' },
-				{ name: 'expected_output', type: 'string' },
-			],
-			{ projectId: 'p1' },
-		);
-		expect(context.dataTableService.insertRows).not.toHaveBeenCalled();
-		expect(result).toMatchObject({ table: { id: 'dt-1' } });
+describe('createEvalSetupAgentTool — tool registry', () => {
+	it('does not export createEmptyEvalDataTableTool (tool has been removed)', () => {
+		// eslint-disable-next-line @typescript-eslint/no-require-imports
+		const mod = require('../eval-setup-agent.tool') as Record<string, unknown>;
+		expect(mod.createEmptyEvalDataTableTool).toBeUndefined();
 	});
 });
 

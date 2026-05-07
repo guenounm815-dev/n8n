@@ -57,6 +57,7 @@ const evalWfWithMetrics = (): WorkflowJSON =>
 				parameters: {
 					operation: 'setMetrics',
 					expectedAnswer: "={{ $('EvalTrig').item.json.expected_response }}",
+					actualAnswer: '={{ $json.output }}',
 				},
 				position: [400, 0],
 				id: 'm',
@@ -203,13 +204,50 @@ describe('eval-data tool', () => {
 		expect(result.reason).toMatch(/no-detectable-input-columns/);
 	});
 
-	it('reports warningExpectedColumnsEmpty when target has expected_* metric columns', async () => {
+	it('populates expected_* columns from agent output in the history path', async () => {
+		const summaries = Array.from({ length: 12 }, (_, i) => ({ id: `e${i}`, status: 'success' }));
+		const insertRows = jest.fn().mockResolvedValue(undefined);
+		const ctx = buildOrchestrationCtx({
+			domainContext: {
+				workflowService: { getAsWorkflowJSON: jest.fn().mockResolvedValue(evalWfWithMetrics()) },
+				dataTableService: { insertRows },
+				executionService: {
+					list: jest.fn().mockResolvedValueOnce(summaries).mockResolvedValueOnce([]),
+					getNodeOutput: jest.fn(async (id: string, nodeName: string) => {
+						if (nodeName === 'EvalTrig') {
+							return {
+								nodeName,
+								items: [{ json: { user_query: `q-${id}` } }],
+								totalItems: 1,
+								returned: { from: 0, to: 0 },
+							};
+						}
+						// Agent node
+						return {
+							nodeName,
+							items: [{ json: { output: `a-${id}` } }],
+							totalItems: 1,
+							returned: { from: 0, to: 0 },
+						};
+					}),
+				},
+				logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn() },
+			},
+		});
+		const tool = createEvalDataAgentTool(ctx as never);
+		const result = await tool.execute!({ workflowId: 'w1' }, { agent: {} } as never);
+		expect(result.status).toBe('imported');
+		expect(result.rowCount).toBe(12);
+		expect(insertRows).toHaveBeenCalledWith('dt-1', expect.any(Array), undefined);
+		const insertedRows = insertRows.mock.calls[0][1] as Array<Record<string, string>>;
+		expect(insertedRows[0]).toEqual({ user_query: 'q-e0', expected_response: 'a-e0' });
+	});
+
+	it('synthetic path generates both input AND expected columns', async () => {
 		const insertRows = jest.fn();
 		const ctx = buildOrchestrationCtx({
 			domainContext: {
-				workflowService: {
-					getAsWorkflowJSON: jest.fn().mockResolvedValue(evalWfWithMetrics()),
-				},
+				workflowService: { getAsWorkflowJSON: jest.fn().mockResolvedValue(evalWfWithMetrics()) },
 				dataTableService: { insertRows },
 				executionService: {
 					list: jest.fn().mockResolvedValueOnce([]).mockResolvedValueOnce([]),
@@ -218,12 +256,17 @@ describe('eval-data tool', () => {
 				logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn() },
 			},
 		});
-		jest
+		const generateSpy = jest
 			.spyOn(require('../../evals/generate-sample-rows.service'), 'generateSampleRows')
-			.mockResolvedValue([{ user_query: 'q' }]);
+			.mockResolvedValue([{ user_query: 'q', expected_response: 'r' }]);
 		const tool = createEvalDataAgentTool(ctx as never);
-		const result = await tool.execute!({ workflowId: 'w1' }, { agent: {} } as never);
-		expect(result.warningExpectedColumnsEmpty).toEqual(['expected_response']);
+		await tool.execute!({ workflowId: 'w1' }, { agent: {} } as never);
+		expect(generateSpy).toHaveBeenCalledWith(
+			expect.objectContaining({
+				columns: ['user_query', 'expected_response'],
+				rowCount: 10,
+			}),
+		);
 	});
 
 	it('forwards projectId to insertRows when present', async () => {

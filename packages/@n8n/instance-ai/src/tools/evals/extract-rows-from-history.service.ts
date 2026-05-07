@@ -11,6 +11,12 @@ export interface ExtractRowsInput {
 	workflowId: string;
 	agentNodeName: string;
 	inputColumns: string[];
+	/**
+	 * For each expected_* column, the agent output field whose value should
+	 * be projected into that column. Empty array means no expected columns
+	 * to populate from history.
+	 */
+	expectedToActualPairs: Array<{ expectedColumn: string; actualField: string }>;
 }
 
 export interface ExtractRowsResult {
@@ -36,14 +42,30 @@ function findParentNode(workflow: WorkflowJSON, targetNodeName: string): string 
 	return undefined;
 }
 
-function projectRow(json: unknown, columns: string[]): Record<string, string> | undefined {
-	if (!isRecord(json)) return undefined;
+function projectRow(
+	parentJson: unknown,
+	agentJson: unknown,
+	inputColumns: string[],
+	expectedToActualPairs: Array<{ expectedColumn: string; actualField: string }>,
+): Record<string, string> | undefined {
+	if (!isRecord(parentJson)) return undefined;
 	const row: Record<string, string> = {};
-	for (const col of columns) {
-		const value = json[col];
+
+	for (const col of inputColumns) {
+		const value = parentJson[col];
 		if (value === undefined || value === null) return undefined;
 		row[col] = typeof value === 'string' ? value : JSON.stringify(value);
 	}
+
+	if (expectedToActualPairs.length > 0) {
+		if (!isRecord(agentJson)) return undefined;
+		for (const { expectedColumn, actualField } of expectedToActualPairs) {
+			const value = agentJson[actualField];
+			if (value === undefined || value === null) return undefined;
+			row[expectedColumn] = typeof value === 'string' ? value : JSON.stringify(value);
+		}
+	}
+
 	return row;
 }
 
@@ -75,27 +97,32 @@ export async function extractRowsFromExecutionHistory(
 	for (const summary of summaries) {
 		if (rows.length >= MAX_ROWS) break;
 
-		let output: NodeOutputResult | undefined;
+		let parentOutput: NodeOutputResult | undefined;
+		let agentOutput: NodeOutputResult | undefined;
 		try {
-			output = await ctx.executionService.getNodeOutput(summary.id, parentNodeName, {
+			parentOutput = await ctx.executionService.getNodeOutput(summary.id, parentNodeName, {
 				maxItems: 1,
 			});
+			if (input.expectedToActualPairs.length > 0) {
+				agentOutput = await ctx.executionService.getNodeOutput(summary.id, input.agentNodeName, {
+					maxItems: 1,
+				});
+			}
 		} catch (err) {
 			ctx.logger?.warn('extract-rows: getNodeOutput failed', {
 				executionId: summary.id,
-				parentNodeName,
 				err,
 			});
 			continue;
 		}
 		scannedExecutions++;
 
-		const item = output.items[0];
-		let json: unknown = undefined;
-		if (isRecord(item)) {
-			json = item.json;
-		}
-		const row = projectRow(json, input.inputColumns);
+		const parentItem = parentOutput.items[0];
+		const parentJson = isRecord(parentItem) ? parentItem.json : undefined;
+		const agentItem = agentOutput?.items[0];
+		const agentJson = agentItem !== undefined && isRecord(agentItem) ? agentItem.json : undefined;
+
+		const row = projectRow(parentJson, agentJson, input.inputColumns, input.expectedToActualPairs);
 		if (row) rows.push(row);
 	}
 

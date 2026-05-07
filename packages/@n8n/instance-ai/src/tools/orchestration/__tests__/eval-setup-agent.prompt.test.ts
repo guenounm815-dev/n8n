@@ -83,3 +83,13 @@ describe('EVAL_SETUP_AGENT_PROMPT — direct wiring (new design)', () => {
 		expect(EVAL_SETUP_AGENT_PROMPT).not.toMatch(/EvaluationTrigger\s*──→\s*\[Set:/);
 	});
 });
+
+describe('EVAL_SETUP_AGENT_PROMPT — no DataTable creation tool', () => {
+	it('does not reference the create-empty-eval-data-table tool', () => {
+		expect(EVAL_SETUP_AGENT_PROMPT).not.toMatch(/create-empty-eval-data-table/);
+	});
+
+	it('instructs the sub-agent to use the provided DataTable id as-is', () => {
+		expect(EVAL_SETUP_AGENT_PROMPT).toMatch(/use it as-is/i);
+	});
+});

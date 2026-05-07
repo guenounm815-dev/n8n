@@ -47,6 +47,7 @@ describe('extractRowsFromExecutionHistory', () => {
 			workflowId: 'w1',
 			agentNodeName: 'Agent',
 			inputColumns: ['user_query'],
+			expectedToActualPairs: [],
 		});
 		expect(result.rows).toEqual([]);
 		expect(result.scannedExecutions).toBe(0);
@@ -84,6 +85,7 @@ describe('extractRowsFromExecutionHistory', () => {
 			workflowId: 'w1',
 			agentNodeName: 'Agent',
 			inputColumns: ['user_query'],
+			expectedToActualPairs: [],
 		});
 
 		expect(result.rows).toEqual([{ user_query: 'hello' }, { user_query: 'world' }]);
@@ -122,6 +124,7 @@ describe('extractRowsFromExecutionHistory', () => {
 			workflowId: 'w1',
 			agentNodeName: 'Agent',
 			inputColumns: ['user_query', 'context'],
+			expectedToActualPairs: [],
 		});
 
 		expect(result.rows).toEqual([{ user_query: 'hello', context: 'c' }]);
@@ -148,6 +151,7 @@ describe('extractRowsFromExecutionHistory', () => {
 			workflowId: 'w1',
 			agentNodeName: 'Agent',
 			inputColumns: ['payload'],
+			expectedToActualPairs: [],
 		});
 
 		expect(result.rows).toEqual([{ payload: '{"nested":1}' }]);
@@ -176,6 +180,7 @@ describe('extractRowsFromExecutionHistory', () => {
 			workflowId: 'w1',
 			agentNodeName: 'Agent',
 			inputColumns: ['user_query'],
+			expectedToActualPairs: [],
 		});
 
 		expect(result.rows).toHaveLength(25);
@@ -211,6 +216,7 @@ describe('extractRowsFromExecutionHistory', () => {
 			workflowId: 'w1',
 			agentNodeName: 'Agent',
 			inputColumns: ['user_query'],
+			expectedToActualPairs: [],
 		});
 
 		expect(list).toHaveBeenNthCalledWith(1, { workflowId: 'w1', status: 'success', limit: 100 });
@@ -233,9 +239,87 @@ describe('extractRowsFromExecutionHistory', () => {
 			workflowId: 'w1',
 			agentNodeName: 'Agent',
 			inputColumns: ['user_query'],
+			expectedToActualPairs: [],
 		});
 
 		expect(result.rows).toEqual([]);
 		expect(result.scannedExecutions).toBe(0);
+	});
+
+	it('extracts expected columns from agent output when expectedToActualPairs are provided', async () => {
+		const ctx = buildContext({
+			executionService: {
+				list: jest
+					.fn()
+					.mockResolvedValueOnce([{ id: 'e1', status: 'success' }])
+					.mockResolvedValueOnce([]),
+				getNodeOutput: jest.fn(async (_id: string, nodeName: string) => {
+					if (nodeName === 'Trigger') {
+						return {
+							nodeName: 'Trigger',
+							items: [{ json: { user_query: 'hi' } }],
+							totalItems: 1,
+							returned: { from: 0, to: 0 },
+						};
+					}
+					// Agent node
+					return {
+						nodeName: 'Agent',
+						items: [{ json: { output: 'hello world' } }],
+						totalItems: 1,
+						returned: { from: 0, to: 0 },
+					};
+				}),
+			},
+		});
+		const result = await extractRowsFromExecutionHistory(ctx as any, {
+			workflow: buildWorkflow(),
+			workflowId: 'w1',
+			agentNodeName: 'Agent',
+			inputColumns: ['user_query'],
+			expectedToActualPairs: [{ expectedColumn: 'expected_response', actualField: 'output' }],
+		});
+		expect(result.rows).toEqual([{ user_query: 'hi', expected_response: 'hello world' }]);
+	});
+
+	it('skips execution if the agent output is missing the actualField', async () => {
+		const ctx = buildContext({
+			executionService: {
+				list: jest
+					.fn()
+					.mockResolvedValueOnce([{ id: 'e1', status: 'success' }])
+					.mockResolvedValueOnce([]),
+				getNodeOutput: jest.fn(async (_id: string, nodeName: string) => {
+					if (nodeName === 'Trigger') {
+						return {
+							nodeName: 'Trigger',
+							items: [{ json: { user_query: 'hi' } }],
+							totalItems: 1,
+							returned: { from: 0, to: 0 },
+						};
+					}
+					return {
+						nodeName: 'Agent',
+						items: [
+							{
+								json: {
+									/* no output field */
+								},
+							},
+						],
+						totalItems: 1,
+						returned: { from: 0, to: 0 },
+					};
+				}),
+			},
+		});
+		const result = await extractRowsFromExecutionHistory(ctx as any, {
+			workflow: buildWorkflow(),
+			workflowId: 'w1',
+			agentNodeName: 'Agent',
+			inputColumns: ['user_query'],
+			expectedToActualPairs: [{ expectedColumn: 'expected_response', actualField: 'output' }],
+		});
+		expect(result.rows).toEqual([]);
 	});
 });
