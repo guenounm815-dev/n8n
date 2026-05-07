@@ -1,19 +1,16 @@
-import type { WorkflowJSON } from '@n8n/workflow-sdk';
 import { nanoid } from 'nanoid';
 
-import { generateSampleRows } from './generate-sample-rows.service';
 import type { InstanceAiContext, DataTableSummary } from '../../types';
 
-const SAMPLE_ROW_COUNT = 25;
-
-export interface EnsureEvalDataTableInput {
+export interface CreateEmptyEvalDataTableInput {
 	workflowName: string;
 	projectId?: string;
 	columns: string[];
-	workflowForSamples: WorkflowJSON;
 }
 
-async function createDataTableWithUniqueName(
+const NAME_COLLISION_RE = /already exists/i;
+
+async function createWithUniqueName(
 	ctx: InstanceAiContext,
 	baseName: string,
 	columns: Array<{ name: string; type: 'string' }>,
@@ -23,16 +20,14 @@ async function createDataTableWithUniqueName(
 		return await ctx.dataTableService.create(baseName, columns, options);
 	} catch (error) {
 		const msg = error instanceof Error ? error.message : String(error);
-		if (!/already exists/i.test(msg)) throw error;
-		// Name collision: retry with a short suffix. Keep retrying with a new
-		// suffix on further collisions (extremely unlikely with nanoid).
+		if (!NAME_COLLISION_RE.test(msg)) throw error;
 		for (let attempt = 0; attempt < 3; attempt++) {
 			const suffixedName = `${baseName} (${nanoid(5)})`;
 			try {
 				return await ctx.dataTableService.create(suffixedName, columns, options);
 			} catch (retryError) {
 				const retryMsg = retryError instanceof Error ? retryError.message : String(retryError);
-				if (!/already exists/i.test(retryMsg)) throw retryError;
+				if (!NAME_COLLISION_RE.test(retryMsg)) throw retryError;
 			}
 		}
 		throw error;
@@ -40,30 +35,19 @@ async function createDataTableWithUniqueName(
 }
 
 /**
- * Create a fresh DataTable for a workflow's eval setup AND populate it with
- * LLM-generated sample rows in one shot. Returns the new DataTable's id and
- * resolved name. Called inline from the `evals(action="propose")` handler so
- * the eval-setup sub-agent only needs to wire the EvaluationTrigger to a
- * ready-made dataset.
+ * Create a fresh DataTable for a workflow's eval setup, with the requested
+ * columns and zero rows. Population is the responsibility of `eval-data`,
+ * invoked separately after the user confirms via
+ * `evals(action="offer-data-population")`.
  */
-export async function ensureEvalDataTable(
+export async function createEmptyEvalDataTable(
 	ctx: InstanceAiContext,
-	input: EnsureEvalDataTableInput,
+	input: CreateEmptyEvalDataTableInput,
 ): Promise<{ id: string; name: string }> {
-	const dt = await createDataTableWithUniqueName(
+	const dt = await createWithUniqueName(
 		ctx,
 		`${input.workflowName} — eval samples`,
 		input.columns.map((n) => ({ name: n, type: 'string' as const })),
-		input.projectId ? { projectId: input.projectId } : undefined,
-	);
-	const rows = await generateSampleRows({
-		workflow: input.workflowForSamples,
-		columns: input.columns,
-		rowCount: SAMPLE_ROW_COUNT,
-	});
-	await ctx.dataTableService.insertRows(
-		dt.id,
-		rows,
 		input.projectId ? { projectId: input.projectId } : undefined,
 	);
 	return { id: dt.id, name: dt.name };

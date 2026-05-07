@@ -69,27 +69,25 @@ describe('formatEvalSetupTask', () => {
 		expect(task).toMatch(/Normal/);
 	});
 
-	it('instructs the shape bridge to enter the target AI node directly', () => {
+	it('instructs direct wiring from EvaluationTrigger to the target AI node', () => {
 		const task = formatEvalSetupTask(BASE);
 
-		expect(task).toContain('SHAPE BRIDGE) → target AI agent node');
+		expect(task).toContain('EvaluationTrigger → target AI agent node');
 		expect(task).not.toContain('first processing node');
 	});
 
-	it('instructs shape bridge assignments to read only the current eval row', () => {
+	it('instructs agent parameter rewrite to use dataset columns', () => {
 		const task = formatEvalSetupTask(BASE);
 
-		expect(task).toContain('current EvaluationTrigger row');
-		expect(task).toContain('$json.<input_column>');
-		expect(task).toContain('Never reference original workflow nodes');
-		expect(task).toContain("$('Some Node').item.json");
+		expect(task).toContain('$json.<column>');
+		expect(task).toContain('rewrite those parameter expressions');
 	});
 
-	it('instructs eval setup not to rewrite existing AI agent parameters', () => {
+	it('instructs to rewrite agent input parameters to use dataset columns', () => {
 		const task = formatEvalSetupTask(BASE);
 
-		expect(task).toContain('Do not modify existing production node parameters');
-		expect(task).toContain('do not rewrite the AI Agent prompt');
+		expect(task).toContain('rewrite those parameter expressions to use');
+		expect(task).toContain('INPUT COLUMNS');
 	});
 
 	it('lists the suggested output columns as bullet items', () => {
@@ -99,5 +97,81 @@ describe('formatEvalSetupTask', () => {
 		});
 		expect(task).toContain('- agent_response');
 		expect(task).toContain('- tool_used');
+	});
+
+	it('renders the chosen metric ids and omits the empty output-columns block', () => {
+		const task = formatEvalSetupTask({
+			workflowId: 'w1',
+			workflowName: 'Wf',
+			detectedAiNodes: ['Agent'],
+			datasetChoice: 'link-existing',
+			existingDataTableId: 'dt-1',
+			projectId: 'p1',
+			suggestedInputColumns: ['user_query'],
+			suggestedOutputColumns: [],
+			enabledMetrics: [
+				{
+					id: 'correctness',
+					name: 'Correctness',
+					kind: 'llm-judge' as const,
+					cannedMetricKey: 'correctness',
+					description: '',
+					prompt: '',
+					defaultEnabled: true,
+				},
+				{
+					id: 'tool_use',
+					name: 'Tool use',
+					kind: 'llm-judge' as const,
+					cannedMetricKey: 'tool_use',
+					description: '',
+					prompt: '',
+					defaultEnabled: false,
+				},
+			],
+		});
+
+		expect(task).toMatch(/correctness/);
+		expect(task).toMatch(/tool_use/);
+		// No empty "Suggested output columns:" line ending with a dangling colon or empty list.
+		expect(task).not.toMatch(/Suggested output columns:\s*$/m);
+		expect(task).not.toMatch(/Suggested output columns:\s*\n/);
+	});
+});
+
+describe('formatEvalSetupTask — no shape bridge', () => {
+	const sampleTask = formatEvalSetupTask({
+		workflowId: 'w1',
+		workflowName: 'Wf',
+		detectedAiNodes: ['Agent'],
+		datasetChoice: 'link-existing',
+		existingDataTableId: 'dt-1',
+		projectId: 'p1',
+		suggestedInputColumns: ['user_query'],
+		suggestedOutputColumns: [],
+		enabledMetrics: [
+			{
+				id: 'correctness',
+				name: 'Correctness',
+				kind: 'llm-judge' as const,
+				cannedMetricKey: 'correctness',
+				description: '',
+				prompt: '',
+				defaultEnabled: true,
+			},
+		],
+	});
+
+	it('does not mention shape bridge', () => {
+		expect(sampleTask).not.toMatch(/shape bridge/i);
+		expect(sampleTask).not.toMatch(/Set bridge/i);
+	});
+
+	it('does not forbid modifying agent parameters as a hard rule', () => {
+		expect(sampleTask).not.toMatch(/DO NOT MODIFY TARGET AI AGENT PARAMETERS/);
+	});
+
+	it('instructs direct wiring from EvaluationTrigger to the agent', () => {
+		expect(sampleTask).toMatch(/EvaluationTrigger.*direct.*agent/i);
 	});
 });

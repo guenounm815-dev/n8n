@@ -1,3 +1,5 @@
+import { formatEvalSetupTask } from '../../evals/format-eval-setup-task';
+
 // Mock heavy Mastra dependencies to avoid ESM issues in Jest
 jest.mock('@mastra/core/agent', () => ({
 	Agent: jest.fn(),
@@ -107,5 +109,32 @@ describe('createEmptyEvalDataTableTool', () => {
 		);
 		expect(context.dataTableService.insertRows).not.toHaveBeenCalled();
 		expect(result).toMatchObject({ table: { id: 'dt-1' } });
+	});
+});
+
+describe('formatEvalSetupTask', () => {
+	it('passes a task string containing the chosen metrics block to the sub-agent', () => {
+		const task = formatEvalSetupTask({
+			workflowId: 'w1',
+			workflowName: 'Wf',
+			detectedAiNodes: ['Agent'],
+			datasetChoice: 'link-existing',
+			existingDataTableId: 'dt-1',
+			suggestedInputColumns: ['user_query'],
+			suggestedOutputColumns: [],
+			enabledMetrics: [
+				{
+					id: 'correctness',
+					name: 'Correctness',
+					kind: 'llm-judge',
+					cannedMetricKey: 'correctness',
+					description: '',
+					prompt: '',
+					defaultEnabled: true,
+				},
+			],
+		});
+		expect(task).toMatch(/METRICS TO CONFIGURE/i);
+		expect(task).toMatch(/correctness/);
 	});
 });

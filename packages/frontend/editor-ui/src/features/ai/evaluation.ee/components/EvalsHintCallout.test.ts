@@ -114,6 +114,7 @@ describe('EvalsHintCallout', () => {
 		instanceAiStore = {
 			newThread: vi.fn().mockReturnValue('new-thread-id'),
 			sendMessage: vi.fn().mockResolvedValue(undefined),
+			threads: [{ id: 'new-thread-id' }],
 		} as unknown as ReturnType<typeof useInstanceAiStore>;
 		(useInstanceAiStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue(instanceAiStore);
 
@@ -193,14 +194,27 @@ describe('EvalsHintCallout', () => {
 		expect(instanceAiStore.sendMessage).toHaveBeenCalledWith(
 			`Set up evals for workflow ${WORKFLOW_ID}`,
 		);
-		expect(router.push).toHaveBeenCalledWith({
-			name: INSTANCE_AI_THREAD_VIEW,
-			params: { threadId: 'new-thread-id' },
+		await vi.waitFor(() => {
+			expect(router.push).toHaveBeenCalledWith({
+				name: INSTANCE_AI_THREAD_VIEW,
+				params: { threadId: 'new-thread-id' },
+			});
 		});
 		expect(telemetry.track).toHaveBeenCalledWith(
 			'evals_hint_cta_clicked',
 			expect.objectContaining({ workflowId: WORKFLOW_ID }),
 		);
+	});
+
+	it('does not navigate when thread persistence failed', async () => {
+		(instanceAiStore as unknown as { threads: Array<{ id: string }> }).threads = [];
+		const { findByTestId } = renderComponent();
+		const cta = await findByTestId('evals-hint-cta');
+		cta.click();
+		await vi.waitFor(() => {
+			expect(instanceAiStore.sendMessage).toHaveBeenCalled();
+		});
+		expect(router.push).not.toHaveBeenCalled();
 	});
 
 	it('persists dismissal on X click and hides the callout', async () => {

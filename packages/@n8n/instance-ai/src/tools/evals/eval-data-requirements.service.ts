@@ -1,6 +1,15 @@
 import type { WorkflowJSON } from '@n8n/workflow-sdk';
 
-type WorkflowNode = WorkflowJSON['nodes'][number];
+import { analyzeAgentInputColumns } from './analyze-agent-input-columns.service';
+import {
+	collectStrings,
+	extractJsonColumnRefs,
+	isRecord,
+	nodeHasName,
+	nodeTypeEndsWith,
+	unique,
+	type WorkflowNode,
+} from './column-ref-utils';
 
 export interface EvalDataTarget {
 	dataTableId: string;
@@ -15,22 +24,6 @@ export interface EvalDataTarget {
 export interface EvalDataRequirements {
 	targets: EvalDataTarget[];
 	reason?: string;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return value !== null && typeof value === 'object' && !Array.isArray(value);
-}
-
-function unique(values: string[]): string[] {
-	return [...new Set(values.filter((value) => value.length > 0))];
-}
-
-function nodeTypeEndsWith(node: WorkflowNode, suffix: string): boolean {
-	return node.type === suffix || node.type.endsWith(`.${suffix}`);
-}
-
-function nodeHasName(node: WorkflowNode): node is WorkflowNode & { name: string } {
-	return typeof node.name === 'string' && node.name.length > 0;
 }
 
 function readOperation(node: WorkflowNode): string | undefined {
@@ -48,28 +41,6 @@ function readDataTableId(node: WorkflowNode): string | undefined {
 	if (!isRecord(dataTableId)) return undefined;
 	const value = dataTableId.value;
 	return typeof value === 'string' && value.length > 0 ? value : undefined;
-}
-
-function collectStrings(value: unknown): string[] {
-	if (typeof value === 'string') return [value];
-	if (Array.isArray(value)) return value.flatMap(collectStrings);
-	if (!isRecord(value)) return [];
-	return Object.values(value).flatMap(collectStrings);
-}
-
-function extractJsonColumnRefs(text: string): string[] {
-	const refs: string[] = [];
-	const patterns = [
-		/\$json\.([A-Za-z_][A-Za-z0-9_]*)/g,
-		/\.item\.json\.([A-Za-z_][A-Za-z0-9_]*)/g,
-		/item\.json\.([A-Za-z_][A-Za-z0-9_]*)/g,
-	];
-	for (const pattern of patterns) {
-		for (const match of text.matchAll(pattern)) {
-			if (match[1]) refs.push(match[1]);
-		}
-	}
-	return unique(refs);
 }
 
 function childNames(workflow: WorkflowJSON, sourceName: string, outputIndex?: number): string[] {
@@ -114,19 +85,6 @@ function nodeByName(workflow: WorkflowJSON): Map<string, WorkflowNode> {
 
 function isAiAgentNode(node: WorkflowNode | undefined): boolean {
 	return Boolean(node?.type.includes('n8n-nodes-langchain.agent'));
-}
-
-function inputColumnsFromShapeBridge(workflow: WorkflowJSON, evalTriggerName: string): string[] {
-	const byName = nodeByName(workflow);
-	const directChildren = childNames(workflow, evalTriggerName);
-	const setNodes = directChildren
-		.map((name) => byName.get(name))
-		.filter((node): node is WorkflowNode => Boolean(node && nodeTypeEndsWith(node, 'set')));
-	return unique(
-		setNodes.flatMap((node) =>
-			collectStrings(node.parameters).flatMap((text) => extractJsonColumnRefs(text)),
-		),
-	);
 }
 
 function expectedColumnsFromMetricNodes(nodes: WorkflowNode[]): string[] {
@@ -193,12 +151,16 @@ export function analyzeEvalDataRequirements(workflow: WorkflowJSON): EvalDataReq
 			)
 			.map((node) => node.name);
 
+		const targetAgentNodeName = firstReachableAgentName(workflow, trigger.name);
+
 		return [
 			{
 				dataTableId,
 				evaluationTriggerName: trigger.name,
-				targetAgentNodeName: firstReachableAgentName(workflow, trigger.name),
-				inputColumns: inputColumnsFromShapeBridge(workflow, trigger.name),
+				targetAgentNodeName,
+				inputColumns: targetAgentNodeName
+					? analyzeAgentInputColumns(workflow, targetAgentNodeName).inputColumns
+					: [],
 				expectedOutputColumns: expectedColumnsFromMetricNodes(reachableNodes),
 				actualOutputColumns: actualColumnsFromSetOutputs(reachableNodes),
 				metricNodeNames,

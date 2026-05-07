@@ -6,10 +6,23 @@ const EVALUATION_TYPES = new Set<string>([
 	'n8n-nodes-base.evaluationTrigger',
 ]);
 
-// Langchain nodes that are SUB-COMPONENTS (chat models, memory, embeddings,
-// tools, triggers) — they hang off a root agent and are not themselves the
-// thing we evaluate. Detection treats only root agents as "AI nodes".
-const NON_ROOT_TYPE_PARTS = ['trigger', 'lm', 'model', 'embedding', 'memory', 'tool'];
+// Explicit allow-list of root AI nodes — agents and chains that consume an LLM
+// and produce the output we want to evaluate. Sub-components (chat models,
+// memory, embeddings, tools, parsers, vector stores, retrievers, document
+// loaders, text splitters, triggers) hang off a root and are NOT themselves
+// evaluation targets. An allow-list avoids the substring traps that bite
+// heuristics — e.g. `chainLlm` contains `lm`, which a substring deny-list
+// would mistake for a chat-model sub-component.
+const ROOT_AI_TYPES = new Set<string>([
+	`${LANGCHAIN_TYPE_PREFIX}agent`,
+	`${LANGCHAIN_TYPE_PREFIX}openAiAssistant`,
+	`${LANGCHAIN_TYPE_PREFIX}chainLlm`,
+	`${LANGCHAIN_TYPE_PREFIX}chainRetrievalQa`,
+	`${LANGCHAIN_TYPE_PREFIX}chainSummarization`,
+	`${LANGCHAIN_TYPE_PREFIX}informationExtractor`,
+	`${LANGCHAIN_TYPE_PREFIX}sentimentAnalysis`,
+	`${LANGCHAIN_TYPE_PREFIX}textClassifier`,
+]);
 
 export interface DetectAiNodesResult {
 	isAiWorkflow: boolean;
@@ -18,9 +31,7 @@ export interface DetectAiNodesResult {
 }
 
 function isRootAgentType(type: string): boolean {
-	if (!type.startsWith(LANGCHAIN_TYPE_PREFIX)) return false;
-	const lower = type.toLowerCase();
-	return !NON_ROOT_TYPE_PARTS.some((part) => lower.includes(part));
+	return ROOT_AI_TYPES.has(type);
 }
 
 export function detectAiNodes(workflow: WorkflowJSON): DetectAiNodesResult {

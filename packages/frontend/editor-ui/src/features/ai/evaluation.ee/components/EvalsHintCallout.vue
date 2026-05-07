@@ -64,12 +64,16 @@ async function onDismiss() {
 	telemetry.track('evals_hint_dismissed', { workflowId: workflowId.value });
 }
 
-async function onSetupEvals() {
+function onSetupEvals() {
 	if (!workflowId.value) return;
 	telemetry.track('evals_hint_cta_clicked', { workflowId: workflowId.value });
 	const threadId = instanceAiStore.newThread();
-	void instanceAiStore.sendMessage(`Set up evals for workflow ${workflowId.value}`);
-	await router.push({ name: INSTANCE_AI_THREAD_VIEW, params: { threadId } });
+	const message = `Set up evals for workflow ${workflowId.value}`;
+	void instanceAiStore.sendMessage(message).then(() => {
+		if (instanceAiStore.threads.some((t) => t.id === threadId)) {
+			void router.push({ name: INSTANCE_AI_THREAD_VIEW, params: { threadId } });
+		}
+	});
 }
 
 watch(

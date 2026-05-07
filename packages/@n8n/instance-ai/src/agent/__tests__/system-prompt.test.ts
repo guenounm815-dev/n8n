@@ -216,42 +216,35 @@ describe('getSystemPrompt', () => {
 	});
 
 	describe('manual eval setup flow', () => {
-		it('routes user-requested eval setup through evals and eval-setup agent', () => {
+		it('routes user-requested eval setup through select-metrics, propose, and eval-setup agent', () => {
 			const prompt = getSystemPrompt({});
 
 			expect(prompt).toContain('**Add-evals flow**');
-			expect(prompt).toContain('Call `evals(action="propose")`');
-			expect(prompt).toContain('returns synchronously — no confirmation card');
-			expect(prompt).toContain('`shouldDelegateToEvalSetupAgent: true`');
-			expect(prompt).toContain('call `eval-setup-with-agent`');
+			expect(prompt).toContain('evals(action="select-metrics"');
+			expect(prompt).toContain('evals(action="propose"');
+			expect(prompt).toMatch(/[Cc]all `eval-setup-with-agent`/);
 			expect(prompt).toContain('Do NOT call `build-workflow-with-agent` for this case');
-		});
-
-		it('cross-references the proactive fresh-build offer in the Add-evals header', () => {
-			const prompt = getSystemPrompt({});
-
-			expect(prompt).toMatch(
-				/for proactive offering after a fresh build, see \*\*Post-build flow\*\* step 4/,
-			);
 		});
 	});
 
 	describe('fresh-build eval suite offer', () => {
-		it('inserts the offer as Post-build flow step 4 with a strict approve/deny widget chain', () => {
+		it('inserts the chain as Post-build flow step 4 with offer → select-metrics → propose → eval-setup → offer-data-population → eval-data', () => {
 			const prompt = getSystemPrompt({});
 
-			expect(prompt).toContain('**Fresh-build eval suite offer.**');
+			expect(prompt).toContain('**Fresh-build eval suite chain.**');
 			expect(prompt).toContain('did NOT pass an existing `workflowId`');
 			expect(prompt).toContain('evals(action="offer", workflowId, projectId)');
-			expect(prompt).toContain('strict approve/deny confirmation widget');
-			expect(prompt).toContain('Do NOT use `ask-user`');
+			expect(prompt).toContain('evals(action="select-metrics", workflowId)');
+			expect(prompt).toContain('chosenMetricIds');
+			expect(prompt).toContain(
+				'evals(action="propose", workflowId, projectId, metrics: chosenMetricIds)',
+			);
+			expect(prompt).toContain('evals(action="offer-data-population", workflowId)');
+			expect(prompt).toContain('eval-setup-with-agent');
 			expect(prompt).toContain('eligible: false');
 			expect(prompt).toContain('approved: false');
 			expect(prompt).toContain('approved: true');
 			expect(prompt).toContain('aiNodeNames');
-			expect(prompt).toContain('evals(action="propose", workflowId, projectId)');
-			expect(prompt).toContain('eval-setup-with-agent');
-			expect(prompt).toContain('Do NOT call `eval-data` separately');
 		});
 
 		it('renumbers the test/publish steps to 5 and 6', () => {
@@ -263,18 +256,18 @@ describe('getSystemPrompt', () => {
 			);
 		});
 
-		it('declares the offer flow non-fatal on every chain failure', () => {
+		it('declares the chain flow non-fatal on every failure', () => {
 			const prompt = getSystemPrompt({});
 
 			expect(prompt).toContain('Failures within step 4 are non-fatal');
-			expect(prompt).toContain('continue to step 5 silently');
+			expect(prompt).toContain('continue silently');
 			expect(prompt).toContain("Couldn't add eval suite");
 		});
 
 		it('treats every `eligible: false` reason as silent skip', () => {
 			const prompt = getSystemPrompt({});
 
-			expect(prompt).toMatch(/skip silently and continue with step 5/);
+			expect(prompt).toMatch(/skip silently/);
 		});
 
 		it('respects prior user intent to skip evals', () => {
@@ -285,21 +278,20 @@ describe('getSystemPrompt', () => {
 			);
 		});
 
-		it('extends the synthesize follow-up with the same offer for the first eligible workflow', () => {
+		it('extends the synthesize follow-up with the same chain for the first eligible workflow', () => {
 			const prompt = getSystemPrompt({});
 
 			expect(prompt).toMatch(/evals\(action="offer", workflowId, projectId\)/);
 			expect(prompt).toContain('strict approve/deny widget');
-			expect(prompt).toContain('run the offer flow for the first one only');
+			expect(prompt).toContain('run the chain for the first one only');
 		});
 
-		it('promotes the synthesize eval offer to its own REQUIRED block with strong directive language', () => {
+		it('promotes the synthesize eval chain to its own REQUIRED block with strong directive language', () => {
 			const prompt = getSystemPrompt({});
 
 			expect(prompt).toContain(
-				'**Synthesize fresh-build eval offer (REQUIRED step before ending the turn):**',
+				'**Synthesize fresh-build eval chain (REQUIRED step before ending the turn):**',
 			);
-			expect(prompt).toContain('you MUST call `evals(action="offer", workflowId, projectId)`');
 			expect(prompt).toContain('This is not optional');
 			expect(prompt).toContain('most common reason users miss the eval feature');
 		});
@@ -346,6 +338,40 @@ describe('getSystemPrompt', () => {
 			const prompt = getSystemPrompt({});
 
 			expect(prompt).not.toContain('## Instance Info');
+		});
+	});
+
+	describe('system prompt — eval chain (new design)', () => {
+		const prompt = getSystemPrompt({});
+
+		it('mentions select-metrics in the post-build flow', () => {
+			expect(prompt).toMatch(/evals\(action="select-metrics"/);
+		});
+
+		it('mentions offer-data-population in the post-build flow', () => {
+			expect(prompt).toMatch(/evals\(action="offer-data-population"/);
+		});
+
+		it('does NOT instruct to call eval-data right after propose anymore', () => {
+			expect(prompt).not.toMatch(/Do NOT call `eval-data` separately/);
+			expect(prompt).not.toMatch(/propose has already populated the DataTable/);
+		});
+
+		it('describes the new add-evals flow starting at select-metrics', () => {
+			expect(prompt).toMatch(/Add-evals flow[\s\S]*select-metrics/);
+		});
+
+		it('does not describe propose as creating a populated DataTable inline', () => {
+			expect(prompt).not.toMatch(/populated DataTable inline/);
+			expect(prompt).not.toMatch(/propose creates a populated DataTable/);
+		});
+
+		it('does not say "default `datasetChoice="generate"`"', () => {
+			expect(prompt).not.toMatch(/datasetChoice="generate"/);
+		});
+
+		it('mentions chosenMetricIds in the chain', () => {
+			expect(prompt).toMatch(/chosenMetricIds/);
 		});
 	});
 });
