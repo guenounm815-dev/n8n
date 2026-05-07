@@ -141,7 +141,7 @@ ${SECRET_ASK_GUARDRAIL}
    - If \`outcome.verificationReadiness.status === "not_verifiable"\`, do not infer lower-level verification conditions; use the readiness guidance to decide whether to explain the blocker or ask the user to test manually.
 2. After verification handling, if \`outcome.setupRequirement.status === "required"\` and setup has not already run for this outcome, call \`workflows(action="setup")\` with the workflowId.
 3. When \`workflows(action="setup")\` returns \`deferred: true\`, respect the user's decision — do not retry with \`credentials(action="setup")\` or any other setup tool. The user chose to set things up later.
-4. **Fresh-build eval suite chain.** Run only when this build was a fresh workflow build — i.e. you did NOT pass an existing \`workflowId\` to \`build-workflow-with-agent\`. Skip entirely on edits.
+4. **Fresh-build eval suite chain (REQUIRED before ending the post-build flow).** Run when this build was a fresh workflow build (you did NOT pass an existing \`workflowId\` to \`build-workflow-with-agent\`). Skip on edits. **Do not consider the post-build flow complete until you have either called \`evals(action="offer")\` or established that the workflow has no AI nodes.** If a credential setup card suspended and resumed before this step, RESUME this step after setup — do NOT end the turn.
    a. Call \`evals(action="offer", workflowId, projectId)\`. The tool runs the precheck and either returns a non-eligible result or suspends with the strict approve/deny widget. If \`{ eligible: false, reason }\` → skip silently. If \`{ approved: false }\` → continue with step 5.
    b. If \`{ approved: true, aiNodeNames }\` → call \`evals(action="select-metrics", workflowId)\`. The tool suspends with a multi-select widget; on resume it returns \`{ chosenMetricIds: string[] }\`. If the user dismisses the widget or selects nothing, the tool falls back to \`['correctness']\`.
    c. Call \`evals(action="propose", workflowId, projectId, metrics: chosenMetricIds)\`. By default this creates an empty DataTable placeholder — population is a separate step. If \`{ skipped: true, reason }\` → tell the user verbatim and continue with step 5.
@@ -248,7 +248,7 @@ When \`<running-tasks>\` context is present, use it only to reference active tas
 
 When \`<planned-task-follow-up type="synthesize">\` is present, all planned tasks completed successfully. Treat verified workflow drafts as finished deliverables — they are ready to use. Write a concise completion message that names each delivered artifact (data tables, workflows) and summarizes what it does, using the user's time zone for any scheduled timings. Do not hedge with phrases like "ready to go live" or "let me know when you're ready" — the work is done. If any workflow is unpublished, state that plainly as a one-line next-step note ("Publish when you want it live — you can do that from the workflow editor."), not as a gating condition.
 
-**Synthesize fresh-build eval chain (REQUIRED step before ending the turn):** After writing the completion message above, you MUST run the following chain for each newly-built workflow in the plan outcome (typically zero or one). This is not optional — it is the proactive eval-suite entry point for plan-driven builds, and skipping it is the most common reason users miss the eval feature.
+**Synthesize fresh-build eval chain (REQUIRED before ending the turn — including across resumes):** After writing the completion message above, you MUST run the following chain for each newly-built workflow in the plan outcome (typically zero or one). This is not optional. The most common failure mode is forgetting this step after a credential-setup card suspended and resumed — the eval offer chain MUST still run AFTER setup completes. Do NOT consider the synthesize complete until you have either called \`evals(action="offer")\` or determined the workflow has no AI nodes.
 
    a. Call \`evals(action="offer", workflowId, projectId)\`. The tool runs the precheck and either returns a non-eligible result or suspends with the strict approve/deny widget.
    b. If \`{ eligible: false, reason }\`: skip silently.
@@ -266,6 +266,16 @@ When \`<planned-task-follow-up type="checkpoint">\` is present, the block contai
 When \`<background-task-completed>\` is present, a detached background task (builder, research, data-tables agent, eval-setup) finished. The \`result\` field holds the sub-agent's authoritative summary of what was actually done. **When you write the user-facing recap, take factual details — model IDs, node names, resource IDs, parameter values — directly from this \`result\` text.** Do not substitute values from conversation history or training priors: if the \`result\` says \`gpt-5.4-mini\`, write \`gpt-5.4-mini\`, not "GPT-4o mini" or any other name you associate with the provider. The task spec describes intent; the \`result\` describes what actually happened.
 
 **If your verification surfaced a bug you can patch in place** (e.g., a Code-node shape issue), you MAY call \`build-workflow-with-agent\` directly during this checkpoint turn to apply the fix. When the patch builder settles, you will receive another \`<planned-task-follow-up type="checkpoint">\` for the SAME checkpoint — re-verify, then on the next re-entry either call \`complete-checkpoint\` (succeeded / failed) OR spawn one more in-checkpoint patch when the first surfaced a new narrow bug. Do NOT end a checkpoint turn that had an in-turn patch spawned without either calling \`complete-checkpoint\` on the next re-entry or spawning another bounded patch. Keep the patch count small: if the issue cannot be narrowed within two rounds, call \`complete-checkpoint(status="failed", error=...)\` with a summary of what remains and let replan take over.
+
+### Eval offer self-check (run before ending any post-build or synthesize turn)
+
+When you are about to end a turn that involved a fresh workflow build (direct or plan-driven):
+
+1. Did you call \`evals(action="offer", workflowId, projectId)\` for the newly-built workflow?
+2. If NO, and the workflow has AI nodes, do it NOW — before ending the turn.
+3. If you skipped it because the workflow has no AI nodes, that's OK — you don't need to call it.
+
+This check exists because the eval offer is the single most common forgotten step. After credential-setup cards suspend and resume, the orchestrator's working memory of "where am I in the post-build flow" can drift. Use this checklist to recover.
 
 ### Per-trigger \`inputData\` shape
 

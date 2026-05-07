@@ -73,7 +73,6 @@ describe('formatEvalSetupTask', () => {
 		const task = formatEvalSetupTask(BASE);
 
 		expect(task).toContain('EvaluationTrigger → target AI agent node');
-		expect(task).not.toContain('first processing node');
 	});
 
 	it('instructs agent parameter rewrite to use dataset columns', () => {
@@ -81,12 +80,6 @@ describe('formatEvalSetupTask', () => {
 
 		expect(task).toContain('$json.<column>');
 		expect(task).toContain('rewrite those parameter expressions');
-	});
-
-	it('instructs to rewrite agent input parameters to use dataset columns', () => {
-		const task = formatEvalSetupTask(BASE);
-
-		expect(task).toContain('rewrite those parameter expressions to use');
 		expect(task).toContain('INPUT COLUMNS');
 	});
 
@@ -139,39 +132,97 @@ describe('formatEvalSetupTask', () => {
 	});
 });
 
-describe('formatEvalSetupTask — no shape bridge', () => {
-	const sampleTask = formatEvalSetupTask({
-		workflowId: 'w1',
-		workflowName: 'Wf',
-		detectedAiNodes: ['Agent'],
-		datasetChoice: 'link-existing',
-		existingDataTableId: 'dt-1',
-		projectId: 'p1',
-		suggestedInputColumns: ['user_query'],
-		suggestedOutputColumns: [],
-		enabledMetrics: [
-			{
-				id: 'correctness',
-				name: 'Correctness',
-				kind: 'llm-judge' as const,
-				cannedMetricKey: 'correctness',
-				description: '',
-				prompt: '',
-				defaultEnabled: true,
-			},
-		],
+describe('formatEvalSetupTask — PRODUCTION ADAPTER section', () => {
+	it('omits the section when namedRefs is empty or undefined', () => {
+		const task = formatEvalSetupTask({
+			workflowId: 'w1',
+			workflowName: 'Wf',
+			detectedAiNodes: ['Agent'],
+			datasetChoice: 'link-existing',
+			existingDataTableId: 'dt-1',
+			suggestedInputColumns: ['user_query'],
+			suggestedOutputColumns: [],
+			enabledMetrics: [
+				{
+					id: 'correctness',
+					name: 'Correctness',
+					kind: 'llm-judge' as const,
+					cannedMetricKey: 'correctness',
+					description: '',
+					prompt: '',
+					defaultEnabled: true,
+				},
+			],
+		});
+		expect(task).not.toMatch(/PRODUCTION ADAPTER/);
 	});
 
-	it('does not mention shape bridge', () => {
-		expect(sampleTask).not.toMatch(/shape bridge/i);
-		expect(sampleTask).not.toMatch(/Set bridge/i);
+	it('emits the PRODUCTION ADAPTER section when namedRefs is non-empty', () => {
+		const task = formatEvalSetupTask({
+			workflowId: 'w1',
+			workflowName: 'Wf',
+			detectedAiNodes: ['Agent'],
+			datasetChoice: 'link-existing',
+			existingDataTableId: 'dt-1',
+			suggestedInputColumns: ['text'],
+			suggestedOutputColumns: [],
+			enabledMetrics: [
+				{
+					id: 'correctness',
+					name: 'Correctness',
+					kind: 'llm-judge' as const,
+					cannedMetricKey: 'correctness',
+					description: '',
+					prompt: '',
+					defaultEnabled: true,
+				},
+			],
+			namedRefs: [
+				{
+					nodeName: 'Voice or Text',
+					field: 'text',
+					originalExpression: "$('Voice or Text').item.json.text",
+					column: 'text',
+				},
+			],
+		});
+		expect(task).toMatch(/PRODUCTION ADAPTER/);
+		// Must mention the source node name AND the dataset column.
+		expect(task).toMatch(/Voice or Text/);
+		expect(task).toMatch(/`text`/);
+		// Must include the original expression and the rewrite target.
+		expect(task).toMatch(/\$\('Voice or Text'\)\.item\.json\.text/);
+		expect(task).toMatch(/\$json\.text/);
 	});
 
-	it('does not forbid modifying agent parameters as a hard rule', () => {
-		expect(sampleTask).not.toMatch(/DO NOT MODIFY TARGET AI AGENT PARAMETERS/);
-	});
-
-	it('instructs direct wiring from EvaluationTrigger to the agent', () => {
-		expect(sampleTask).toMatch(/EvaluationTrigger.*direct.*agent/i);
+	it('lists multiple named-refs as separate adapter assignments', () => {
+		const task = formatEvalSetupTask({
+			workflowId: 'w1',
+			workflowName: 'Wf',
+			detectedAiNodes: ['Agent'],
+			datasetChoice: 'link-existing',
+			existingDataTableId: 'dt-1',
+			suggestedInputColumns: ['voice_text', 'memory_context'],
+			suggestedOutputColumns: [],
+			enabledMetrics: [],
+			namedRefs: [
+				{
+					nodeName: 'Voice or Text',
+					field: 'text',
+					originalExpression: "$('Voice or Text').item.json.text",
+					column: 'voice_text',
+				},
+				{
+					nodeName: 'Memory',
+					field: 'context',
+					originalExpression: "$('Memory').item.json.context",
+					column: 'memory_context',
+				},
+			],
+		});
+		expect(task).toMatch(/Voice or Text/);
+		expect(task).toMatch(/Memory/);
+		expect(task).toMatch(/voice_text/);
+		expect(task).toMatch(/memory_context/);
 	});
 });

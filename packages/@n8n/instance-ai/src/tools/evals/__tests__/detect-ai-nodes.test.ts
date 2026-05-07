@@ -124,11 +124,68 @@ describe('detectAiNodes', () => {
 			'@n8n/n8n-nodes-langchain.textSplitterRecursiveCharacterTextSplitter',
 			'@n8n/n8n-nodes-langchain.vectorStorePinecone',
 			'@n8n/n8n-nodes-langchain.retrieverVectorStore',
-			'@n8n/n8n-nodes-langchain.agentTool',
 		])('does NOT detect %s as a root AI node', (type) => {
 			const result = detectAiNodes(wf([{ name: 'Sub', type }]));
 			expect(result.isAiWorkflow).toBe(false);
 			expect(result.aiNodeNames).toEqual([]);
+		});
+
+		it('detects @n8n/n8n-nodes-langchain.agentTool as a fallback AI node', () => {
+			// agentTool is an agent variant — its local name starts with "agent",
+			// which is not a sub-component prefix, so the fallback path includes it.
+			const result = detectAiNodes(
+				wf([{ name: 'AgentTool', type: '@n8n/n8n-nodes-langchain.agentTool' }]),
+			);
+			expect(result.isAiWorkflow).toBe(true);
+			expect(result.aiNodeNames).toEqual(['AgentTool']);
+		});
+	});
+
+	describe('vendor LLM nodes', () => {
+		it.each([
+			'@n8n/n8n-nodes-langchain.openAi',
+			'@n8n/n8n-nodes-langchain.anthropic',
+			'@n8n/n8n-nodes-langchain.googleGemini',
+			'@n8n/n8n-nodes-langchain.ollama',
+			'@n8n/n8n-nodes-langchain.alibabaCloud',
+			'@n8n/n8n-nodes-langchain.miniMax',
+			'@n8n/n8n-nodes-langchain.moonshot',
+		])('detects %s as a root AI node', (type) => {
+			const result = detectAiNodes(wf([{ name: 'Vendor', type }]));
+			expect(result.isAiWorkflow).toBe(true);
+			expect(result.aiNodeNames).toEqual(['Vendor']);
+		});
+	});
+
+	describe('fallback for unrecognized langchain nodes', () => {
+		it('falls back to any non-sub-component langchain node when no root matches', () => {
+			// Hypothetical future node type not in the allow-list, not matching a sub-component prefix.
+			const result = detectAiNodes(
+				wf([{ name: 'Future', type: '@n8n/n8n-nodes-langchain.futureRootType' }]),
+			);
+			expect(result.isAiWorkflow).toBe(true);
+			expect(result.aiNodeNames).toEqual(['Future']);
+		});
+
+		it('does not fall back when only sub-components are present', () => {
+			const result = detectAiNodes(
+				wf([
+					{ name: 'Memory', type: '@n8n/n8n-nodes-langchain.memoryBufferWindow' },
+					{ name: 'Chat Model', type: '@n8n/n8n-nodes-langchain.lmChatOpenAi' },
+				]),
+			);
+			expect(result.isAiWorkflow).toBe(false);
+			expect(result.aiNodeNames).toEqual([]);
+		});
+
+		it('prefers root types over fallback candidates when both present', () => {
+			const result = detectAiNodes(
+				wf([
+					{ name: 'Future', type: '@n8n/n8n-nodes-langchain.futureRootType' },
+					{ name: 'Real Agent', type: '@n8n/n8n-nodes-langchain.agent' },
+				]),
+			);
+			expect(result.aiNodeNames).toEqual(['Real Agent']);
 		});
 	});
 });

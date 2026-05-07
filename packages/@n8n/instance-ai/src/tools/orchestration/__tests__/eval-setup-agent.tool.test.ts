@@ -73,14 +73,6 @@ describe('createEvalSetupAgentTool', () => {
 	});
 });
 
-describe('createEvalSetupAgentTool — tool registry', () => {
-	it('does not export createEmptyEvalDataTableTool (tool has been removed)', () => {
-		// eslint-disable-next-line @typescript-eslint/no-require-imports
-		const mod = require('../eval-setup-agent.tool') as Record<string, unknown>;
-		expect(mod.createEmptyEvalDataTableTool).toBeUndefined();
-	});
-});
-
 describe('formatEvalSetupTask', () => {
 	it('passes a task string containing the chosen metrics block to the sub-agent', () => {
 		const task = formatEvalSetupTask({

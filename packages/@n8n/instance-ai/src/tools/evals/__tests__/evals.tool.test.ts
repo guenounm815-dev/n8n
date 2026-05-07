@@ -3,10 +3,6 @@ import type { WorkflowJSON } from '@n8n/workflow-sdk';
 import type { InstanceAiContext } from '../../../types';
 import { createEvalsTool } from '../evals.tool';
 
-// No mocks needed for infer-eval-shape.service or generate-sample-rows.service —
-// those are removed from the new design. analyzeAgentInputColumns is a pure
-// function driven by the workflow fixture, no mock required.
-
 /** Minimal AI workflow: trigger + agent node. Agent references $json.user_query. */
 function aiWf(): WorkflowJSON {
 	return {
@@ -109,7 +105,81 @@ function evalConfiguredWf(): WorkflowJSON {
 	} as unknown as WorkflowJSON;
 }
 
-function makeCtx(wf: WorkflowJSON): InstanceAiContext {
+/** AI workflow where the agent reads from a named node ref: $('Voice or Text').item.json.text */
+function aiWfWithNamedRef(): WorkflowJSON {
+	return {
+		name: 'AI Flow',
+		nodes: [
+			{
+				id: '1',
+				name: 'T',
+				type: 'n8n-nodes-base.manualTrigger',
+				typeVersion: 1,
+				position: [0, 0],
+				parameters: {},
+			},
+			{
+				id: '2',
+				name: 'Agent',
+				type: '@n8n/n8n-nodes-langchain.agent',
+				typeVersion: 1,
+				position: [200, 0],
+				parameters: { text: "={{ $('Voice or Text').item.json.text }}" },
+			},
+			{
+				id: '3',
+				name: 'Voice or Text',
+				type: 'n8n-nodes-base.set',
+				typeVersion: 3,
+				position: [-200, 0],
+				parameters: {},
+			},
+		],
+		connections: {},
+	} as unknown as WorkflowJSON;
+}
+
+/** AI workflow where the agent reads both a direct $json ref and a named-node ref. */
+function aiWfWithDirectAndNamedRef(): WorkflowJSON {
+	return {
+		name: 'AI Flow',
+		nodes: [
+			{
+				id: '1',
+				name: 'T',
+				type: 'n8n-nodes-base.manualTrigger',
+				typeVersion: 1,
+				position: [0, 0],
+				parameters: {},
+			},
+			{
+				id: '2',
+				name: 'Agent',
+				type: '@n8n/n8n-nodes-langchain.agent',
+				typeVersion: 1,
+				position: [200, 0],
+				parameters: {
+					text: '={{ $json.user_query }}',
+					systemMessage: "={{ $('Memory').item.json.context }}",
+				},
+			},
+			{
+				id: '3',
+				name: 'Memory',
+				type: 'n8n-nodes-base.set',
+				typeVersion: 3,
+				position: [-200, 0],
+				parameters: {},
+			},
+		],
+		connections: {},
+	} as unknown as WorkflowJSON;
+}
+
+function makeCtx(
+	wf: WorkflowJSON,
+	dataTableOverrides?: Partial<InstanceAiContext['dataTableService']>,
+): InstanceAiContext {
 	return {
 		userId: 'u1',
 		workflowService: {
@@ -119,15 +189,14 @@ function makeCtx(wf: WorkflowJSON): InstanceAiContext {
 			create: jest
 				.fn()
 				.mockResolvedValue({ id: 'dt-new', name: 'AI Flow — eval samples', columns: [] }),
-			insertRows: jest
-				.fn()
-				.mockResolvedValue({
-					insertedCount: 0,
-					dataTableId: 'dt-new',
-					tableName: 'x',
-					projectId: 'p',
-				}),
+			insertRows: jest.fn().mockResolvedValue({
+				insertedCount: 0,
+				dataTableId: 'dt-new',
+				tableName: 'x',
+				projectId: 'p',
+			}),
 			queryRows: jest.fn().mockResolvedValue({ count: 0, data: [] }),
+			...dataTableOverrides,
 		},
 		executionService: {} as never,
 		credentialService: {} as never,
@@ -260,7 +329,10 @@ describe('evals tool — select-metrics action', () => {
 			},
 		} as never)) as Record<string, unknown>;
 
-		expect(result).toEqual({ chosenMetricIds: ['correctness', 'tool_use'] });
+		expect(result).toEqual({
+			chosenMetricIds: ['correctness', 'tool_use'],
+			answers: [{ questionId: 'q1', selectedOptions: ['Correctness', 'Tool use'] }],
+		});
 	});
 
 	it('falls back to ["correctness"] when user dismisses the widget (resumeData.approved=false)', async () => {
@@ -271,7 +343,7 @@ describe('evals tool — select-metrics action', () => {
 			agent: { resumeData: { approved: false } },
 		} as never)) as Record<string, unknown>;
 
-		expect(result).toEqual({ chosenMetricIds: ['correctness'] });
+		expect(result).toEqual({ chosenMetricIds: ['correctness'], answers: [] });
 	});
 
 	it('falls back to ["correctness"] when user submits empty selection', async () => {
@@ -287,7 +359,10 @@ describe('evals tool — select-metrics action', () => {
 			},
 		} as never)) as Record<string, unknown>;
 
-		expect(result).toEqual({ chosenMetricIds: ['correctness'] });
+		expect(result).toEqual({
+			chosenMetricIds: ['correctness'],
+			answers: [{ questionId: 'q1', selectedOptions: [] }],
+		});
 	});
 
 	it('returns skipped when workflow has no AI nodes', async () => {
@@ -337,52 +412,58 @@ describe('evals tool — select-metrics action', () => {
 		expect(questions[0]).toMatchObject({ type: 'multi' });
 		expect(Array.isArray(questions[0].options)).toBe(true);
 	});
-});
 
-// ── action: propose (changed) ──────────────────────────────────────────────
-
-describe('evalsTool — propose gate checks', () => {
-	beforeEach(() => jest.clearAllMocks());
-
-	it('returns skipped when the workflow has no AI nodes', async () => {
-		const wf = {
-			name: 'Plain',
+	it('builds option labels with workflow-specific descriptions and a recommendation marker', async () => {
+		const workflow: WorkflowJSON = {
+			name: 'Chef Workflow',
 			nodes: [
 				{
-					id: '1',
-					name: 'T',
+					id: 't',
+					name: 'Trigger',
 					type: 'n8n-nodes-base.manualTrigger',
 					typeVersion: 1,
 					position: [0, 0],
 					parameters: {},
 				},
+				{
+					id: 'a',
+					name: 'Chef Agent',
+					type: '@n8n/n8n-nodes-langchain.agent',
+					typeVersion: 1,
+					position: [200, 0],
+					parameters: {},
+				},
+				{
+					id: 'c',
+					name: 'Calculator',
+					type: '@n8n/n8n-nodes-langchain.toolCalculator',
+					typeVersion: 1,
+					position: [400, 0],
+					parameters: {},
+				},
 			],
-			connections: {},
+			connections: {
+				Calculator: { ai_tool: [[{ node: 'Chef Agent', type: 'ai_tool', index: 0 }]] },
+			},
 		} as unknown as WorkflowJSON;
-		const ctx = makeCtx(wf);
+		const ctx = makeCtx(workflow);
 		const tool = createEvalsTool(ctx);
+		const suspend = jest.fn();
+		await tool.execute!({ action: 'select-metrics', workflowId: 'w1' }, {
+			agent: { suspend, resumeData: undefined },
+		} as never);
+		const payload = suspend.mock.calls[0][0];
+		const options: string[] = payload.questions[0].options;
 
-		const result = (await tool.execute!({ action: 'propose', workflowId: 'w1' }, {
-			agent: {},
-		} as never)) as Record<string, unknown>;
-
-		expect(result).toMatchObject({ skipped: true });
-	});
-
-	it('returns skipped when EvaluationTrigger already exists', async () => {
-		const ctx = makeCtx(evalConfiguredWf());
-		const tool = createEvalsTool(ctx);
-
-		const result = (await tool.execute!({ action: 'propose', workflowId: 'w1' }, {
-			agent: {},
-		} as never)) as Record<string, unknown>;
-
-		expect(result).toMatchObject({
-			skipped: true,
-			reason: expect.stringMatching(/already/i) as unknown,
-		});
+		// Each option contains the metric name and a description.
+		expect(options.find((o) => o.startsWith('Correctness'))).toMatch(/Chef Agent/);
+		// Tool_use, since agent has tools, is the recommended metric.
+		expect(options.find((o) => o.includes('Tool use'))).toMatch(/recommended/);
+		expect(options.find((o) => o.includes('Tool use'))).toMatch(/Calculator/);
 	});
 });
+
+// ── action: propose (changed) ──────────────────────────────────────────────
 
 describe('evals tool — propose action (changed)', () => {
 	beforeEach(() => jest.clearAllMocks());
@@ -603,5 +684,80 @@ describe('evals tool — offer-data-population action', () => {
 		} as never)) as Record<string, unknown>;
 
 		expect(result).toEqual({ approved: false });
+	});
+});
+
+// ── action: offer with named refs ──────────────────────────────────────────
+
+describe('evals tool — offer with named refs', () => {
+	beforeEach(() => jest.clearAllMocks());
+
+	it('expands the offer message with disclosure when agent has named refs', async () => {
+		const ctx = makeCtx(aiWfWithNamedRef());
+		const tool = createEvalsTool(ctx);
+		const suspend = jest.fn();
+
+		await tool.execute!({ action: 'offer', workflowId: 'w1' }, {
+			agent: { suspend, resumeData: undefined },
+		} as never);
+
+		expect(suspend).toHaveBeenCalled();
+		const message = (suspend.mock.calls[0][0] as Record<string, unknown>).message as string;
+		expect(message).toMatch(/Generate an eval suite/);
+		expect(message).toMatch(/Voice or Text/);
+		expect(message).toMatch(/Set node in the production path/);
+		expect(message).toMatch(/`text`/);
+	});
+
+	it('keeps the offer message short when no named refs are present', async () => {
+		const ctx = makeCtx(aiWf());
+		const tool = createEvalsTool(ctx);
+		const suspend = jest.fn();
+
+		await tool.execute!({ action: 'offer', workflowId: 'w1' }, {
+			agent: { suspend, resumeData: undefined },
+		} as never);
+
+		const message = (suspend.mock.calls[0][0] as Record<string, unknown>).message as string;
+		expect(message).not.toMatch(/Set node/);
+		expect(message).not.toMatch(/production path/);
+	});
+});
+
+// ── action: propose with named refs ───────────────────────────────────────
+
+describe('evals tool — propose with named refs', () => {
+	beforeEach(() => jest.clearAllMocks());
+
+	it('includes named-ref columns in the DataTable schema', async () => {
+		const create = jest
+			.fn()
+			.mockResolvedValue({ id: 'dt-1', name: 'Wf — eval samples', columns: [] });
+		const ctx = makeCtx(aiWfWithNamedRef(), { create });
+		const tool = createEvalsTool(ctx);
+
+		await tool.execute!({ action: 'propose', workflowId: 'w1', metrics: ['correctness'] }, {
+			agent: {},
+		} as never);
+
+		expect(create).toHaveBeenCalledWith(
+			expect.any(String),
+			expect.arrayContaining([{ name: 'text', type: 'string' }]),
+			undefined,
+		);
+	});
+
+	it('combines direct $json refs and named-ref columns in DataTable', async () => {
+		const create = jest.fn().mockResolvedValue({ id: 'dt-1', name: 'x', columns: [] });
+		const ctx = makeCtx(aiWfWithDirectAndNamedRef(), { create });
+		const tool = createEvalsTool(ctx);
+
+		await tool.execute!({ action: 'propose', workflowId: 'w1', metrics: ['correctness'] }, {
+			agent: {},
+		} as never);
+
+		const columnsArg = create.mock.calls[0][1] as Array<{ name: string; type: string }>;
+		const names = columnsArg.map((c) => c.name).sort();
+		expect(names).toEqual(['context', 'user_query']);
 	});
 });

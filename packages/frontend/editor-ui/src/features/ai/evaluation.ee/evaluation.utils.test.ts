@@ -1481,7 +1481,7 @@ describe('utils', () => {
 			expect(isEligibleForEvalsHint(nodes)).toBe(false);
 		});
 
-		it('returns false when a root agent reads JSON from another node via $()', () => {
+		it('remains eligible when a root agent reads JSON from another node (production adapter handles it)', () => {
 			const nodes = [
 				makeNode({
 					name: 'Agent',
@@ -1491,39 +1491,10 @@ describe('utils', () => {
 					},
 				}),
 			];
-			expect(isEligibleForEvalsHint(nodes)).toBe(false);
-		});
-
-		it('returns false when a root agent reads JSON via $node[]', () => {
-			const nodes = [
-				makeNode({
-					name: 'Agent',
-					type: '@n8n/n8n-nodes-langchain.agent',
-					parameters: {
-						text: '={{ $node["Other"].json.input }}',
-					},
-				}),
-			];
-			expect(isEligibleForEvalsHint(nodes)).toBe(false);
-		});
-
-		it('does not flag non-root langchain nodes (lm/memory/tool/embedding) when they reference other nodes', () => {
-			// A chat model that references another node is NOT a root agent —
-			// the rootAgentReadsOtherNode guard must skip it.
-			const nodes = [
-				makeNode({ name: 'Agent', type: '@n8n/n8n-nodes-langchain.agent' }),
-				makeNode({
-					name: 'Model',
-					type: '@n8n/n8n-nodes-langchain.lmChatOpenAi',
-					parameters: { prompt: "={{ $('Other').item.json.text }}" },
-				}),
-			];
 			expect(isEligibleForEvalsHint(nodes)).toBe(true);
 		});
 
-		it('returns false when only sub-langchain nodes exist without a root agent', () => {
-			// Edge case: workflow has lmChatOpenAi (langchain prefix) but no root
-			// agent. We still consider it eligible because the prefix is the gate.
+		it('is eligible when only sub-langchain nodes exist (any langchain prefix is the gate)', () => {
 			const nodes = [makeNode({ name: 'Model', type: '@n8n/n8n-nodes-langchain.lmChatOpenAi' })];
 			expect(isEligibleForEvalsHint(nodes)).toBe(true);
 		});

@@ -74,7 +74,11 @@ const evalWfWithMetrics = (): WorkflowJSON =>
 const buildOrchestrationCtx = (overrides: Record<string, unknown>) => ({
 	domainContext: {
 		workflowService: { getAsWorkflowJSON: jest.fn().mockResolvedValue(evalWf()) },
-		dataTableService: { insertRows: jest.fn().mockResolvedValue(undefined) },
+		dataTableService: {
+			insertRows: jest.fn().mockResolvedValue(undefined),
+			getSchema: jest.fn().mockResolvedValue([]),
+			addColumn: jest.fn().mockResolvedValue(undefined),
+		},
 		executionService: {
 			list: jest.fn().mockResolvedValue([]),
 			getNodeOutput: jest.fn(),
@@ -95,7 +99,11 @@ describe('eval-data tool', () => {
 		const ctx = buildOrchestrationCtx({
 			domainContext: {
 				workflowService: { getAsWorkflowJSON: jest.fn().mockResolvedValue(evalWf()) },
-				dataTableService: { insertRows },
+				dataTableService: {
+					insertRows,
+					getSchema: jest.fn().mockResolvedValue([{ name: 'user_query' }]),
+					addColumn: jest.fn(),
+				},
 				executionService: {
 					list: jest.fn().mockResolvedValueOnce(summaries).mockResolvedValueOnce([]),
 					getNodeOutput: jest.fn(async (id: string) => ({
@@ -123,7 +131,11 @@ describe('eval-data tool', () => {
 		const ctx = buildOrchestrationCtx({
 			domainContext: {
 				workflowService: { getAsWorkflowJSON: jest.fn().mockResolvedValue(evalWf()) },
-				dataTableService: { insertRows },
+				dataTableService: {
+					insertRows,
+					getSchema: jest.fn().mockResolvedValue([{ name: 'user_query' }]),
+					addColumn: jest.fn(),
+				},
 				executionService: {
 					list: jest.fn().mockResolvedValueOnce([]).mockResolvedValueOnce([]),
 					getNodeOutput: jest.fn(),
@@ -210,7 +222,13 @@ describe('eval-data tool', () => {
 		const ctx = buildOrchestrationCtx({
 			domainContext: {
 				workflowService: { getAsWorkflowJSON: jest.fn().mockResolvedValue(evalWfWithMetrics()) },
-				dataTableService: { insertRows },
+				dataTableService: {
+					insertRows,
+					getSchema: jest
+						.fn()
+						.mockResolvedValue([{ name: 'user_query' }, { name: 'expected_response' }]),
+					addColumn: jest.fn(),
+				},
 				executionService: {
 					list: jest.fn().mockResolvedValueOnce(summaries).mockResolvedValueOnce([]),
 					getNodeOutput: jest.fn(async (id: string, nodeName: string) => {
@@ -248,7 +266,13 @@ describe('eval-data tool', () => {
 		const ctx = buildOrchestrationCtx({
 			domainContext: {
 				workflowService: { getAsWorkflowJSON: jest.fn().mockResolvedValue(evalWfWithMetrics()) },
-				dataTableService: { insertRows },
+				dataTableService: {
+					insertRows,
+					getSchema: jest
+						.fn()
+						.mockResolvedValue([{ name: 'user_query' }, { name: 'expected_response' }]),
+					addColumn: jest.fn(),
+				},
 				executionService: {
 					list: jest.fn().mockResolvedValueOnce([]).mockResolvedValueOnce([]),
 					getNodeOutput: jest.fn(),
@@ -269,12 +293,80 @@ describe('eval-data tool', () => {
 		);
 	});
 
+	it('adds missing columns to the DataTable before inserting rows', async () => {
+		const insertRows = jest.fn().mockResolvedValue(undefined);
+		const addColumn = jest.fn().mockResolvedValue(undefined);
+		// Schema has only the input column; expected_response is missing.
+		const getSchema = jest.fn().mockResolvedValue([{ name: 'user_query' }]);
+		const ctx = buildOrchestrationCtx({
+			domainContext: {
+				workflowService: { getAsWorkflowJSON: jest.fn().mockResolvedValue(evalWfWithMetrics()) },
+				dataTableService: { insertRows, getSchema, addColumn },
+				executionService: {
+					list: jest.fn().mockResolvedValueOnce([]).mockResolvedValueOnce([]),
+					getNodeOutput: jest.fn(),
+				},
+				logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn() },
+			},
+		});
+		jest
+			.spyOn(require('../../evals/generate-sample-rows.service'), 'generateSampleRows')
+			.mockResolvedValue([{ user_query: 'q', expected_response: 'r' }]);
+
+		const tool = createEvalDataAgentTool(ctx as never);
+		await tool.execute!({ workflowId: 'w1' }, { agent: {} } as never);
+
+		expect(getSchema).toHaveBeenCalledWith('dt-1', undefined);
+		expect(addColumn).toHaveBeenCalledTimes(1);
+		expect(addColumn).toHaveBeenCalledWith(
+			'dt-1',
+			{ name: 'expected_response', type: 'string' },
+			undefined,
+		);
+		expect(insertRows).toHaveBeenCalled();
+		expect(addColumn.mock.invocationCallOrder[0]).toBeLessThan(
+			insertRows.mock.invocationCallOrder[0],
+		);
+	});
+
+	it('does not add columns that already exist in the DataTable schema', async () => {
+		const insertRows = jest.fn().mockResolvedValue(undefined);
+		const addColumn = jest.fn().mockResolvedValue(undefined);
+		const getSchema = jest
+			.fn()
+			.mockResolvedValue([{ name: 'user_query' }, { name: 'expected_response' }]);
+		const ctx = buildOrchestrationCtx({
+			domainContext: {
+				workflowService: { getAsWorkflowJSON: jest.fn().mockResolvedValue(evalWfWithMetrics()) },
+				dataTableService: { insertRows, getSchema, addColumn },
+				executionService: {
+					list: jest.fn().mockResolvedValueOnce([]).mockResolvedValueOnce([]),
+					getNodeOutput: jest.fn(),
+				},
+				logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn() },
+			},
+		});
+		jest
+			.spyOn(require('../../evals/generate-sample-rows.service'), 'generateSampleRows')
+			.mockResolvedValue([{ user_query: 'q', expected_response: 'r' }]);
+
+		const tool = createEvalDataAgentTool(ctx as never);
+		await tool.execute!({ workflowId: 'w1' }, { agent: {} } as never);
+
+		expect(addColumn).not.toHaveBeenCalled();
+		expect(insertRows).toHaveBeenCalled();
+	});
+
 	it('forwards projectId to insertRows when present', async () => {
 		const insertRows = jest.fn();
 		const ctx = buildOrchestrationCtx({
 			domainContext: {
 				workflowService: { getAsWorkflowJSON: jest.fn().mockResolvedValue(evalWf()) },
-				dataTableService: { insertRows },
+				dataTableService: {
+					insertRows,
+					getSchema: jest.fn().mockResolvedValue([{ name: 'user_query' }]),
+					addColumn: jest.fn(),
+				},
 				executionService: {
 					list: jest.fn().mockResolvedValueOnce([]).mockResolvedValueOnce([]),
 					getNodeOutput: jest.fn(),

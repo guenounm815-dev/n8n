@@ -231,7 +231,9 @@ describe('getSystemPrompt', () => {
 		it('inserts the chain as Post-build flow step 4 with offer → select-metrics → propose → eval-setup → offer-data-population → eval-data', () => {
 			const prompt = getSystemPrompt({});
 
-			expect(prompt).toContain('**Fresh-build eval suite chain.**');
+			expect(prompt).toContain(
+				'**Fresh-build eval suite chain (REQUIRED before ending the post-build flow).**',
+			);
 			expect(prompt).toContain('did NOT pass an existing `workflowId`');
 			expect(prompt).toContain('evals(action="offer", workflowId, projectId)');
 			expect(prompt).toContain('evals(action="select-metrics", workflowId)');
@@ -290,10 +292,10 @@ describe('getSystemPrompt', () => {
 			const prompt = getSystemPrompt({});
 
 			expect(prompt).toContain(
-				'**Synthesize fresh-build eval chain (REQUIRED step before ending the turn):**',
+				'**Synthesize fresh-build eval chain (REQUIRED before ending the turn — including across resumes):**',
 			);
 			expect(prompt).toContain('This is not optional');
-			expect(prompt).toContain('most common reason users miss the eval feature');
+			expect(prompt).toContain('most common failure mode');
 		});
 	});
 

@@ -1,10 +1,16 @@
 import { createTool } from '@mastra/core/tools';
 import { instanceAiConfirmationSeveritySchema } from '@n8n/api-types';
+import type { WorkflowJSON } from '@n8n/workflow-sdk';
 import { nanoid } from 'nanoid';
 import { z } from 'zod';
 
 import { analyzeAgentInputColumns } from './analyze-agent-input-columns.service';
+import { detectAgentNamedRefs, type NamedRef } from './detect-agent-named-refs.service';
 import { detectAiNodes } from './detect-ai-nodes';
+import {
+	describeMetricForWorkflow,
+	recommendedMetricId,
+} from './describe-metric-for-workflow.service';
 import { createEmptyEvalDataTable } from './ensure-eval-data-table.service';
 import { analyzeEvalDataRequirements } from './eval-data-requirements.service';
 import { formatEvalSetupTask } from './format-eval-setup-task';
@@ -121,27 +127,63 @@ type QuestionsResume = z.infer<typeof questionsResumeSchema>;
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
-function offerMessage(aiNodeNames: string[]): string {
-	if (aiNodeNames.length === 1) {
-		return `Generate an eval suite for AI node \`${aiNodeNames[0]}\`?`;
-	}
-	return `Generate an eval suite for ${aiNodeNames.length} AI nodes in this workflow?`;
+function composeOfferMessage(aiNodeNames: string[], namedRefs: NamedRef[]): string {
+	const baseMessage =
+		aiNodeNames.length === 1
+			? `Generate an eval suite for AI node \`${aiNodeNames[0]}\`?`
+			: `Generate an eval suite for ${aiNodeNames.length} AI nodes in this workflow?`;
+
+	if (namedRefs.length === 0) return baseMessage;
+
+	// Disclosure: cite which named nodes will move and into which dataset columns.
+	const sourceNodes = [...new Set(namedRefs.map((r) => r.nodeName))]
+		.map((n) => `\`${n}\``)
+		.join(', ');
+	const targetColumns = namedRefs.map((r) => `\`${r.column}\``).join(', ');
+
+	const noun = namedRefs.length === 1 ? 'expression' : 'expressions';
+	const sourceLabel = namedRefs.length === 1 ? 'node' : 'nodes';
+
+	return (
+		`${baseMessage}\n\n` +
+		`This will modify the agent's input ${noun} (currently reading from ${sourceLabel} ${sourceNodes}) ` +
+		`and insert a Set node in the production path that maps those references to dataset ${targetColumns}, ` +
+		`so the production behavior is preserved.`
+	);
 }
 
 function isMetricId(id: string): id is MetricId {
 	return (METRIC_IDS as readonly string[]).includes(id);
 }
 
-function metricLabel(id: string): string {
-	if (isMetricId(id)) return METRIC_CATALOG[id].name;
-	return id;
+function metricNameOnly(label: string): string {
+	// Strip " (recommended)" suffix if present.
+	const withoutTag = label.replace(/\s*\(recommended\)\s*$/i, '');
+	// Strip " — description" if present.
+	const dashIndex = withoutTag.indexOf(' — ');
+	return dashIndex >= 0 ? withoutTag.slice(0, dashIndex) : withoutTag;
 }
 
 function labelToId(label: string): string | undefined {
+	const name = metricNameOnly(label);
 	for (const id of METRIC_IDS) {
-		if (METRIC_CATALOG[id].name === label) return id;
+		if (METRIC_CATALOG[id].name === name) return id;
 	}
 	return undefined;
+}
+
+function metricLabel(
+	workflow: WorkflowJSON,
+	agentName: string,
+	id: string,
+	recommended: string,
+): string {
+	const name = isMetricId(id) ? METRIC_CATALOG[id].name : id;
+	const description = describeMetricForWorkflow(workflow, agentName, id);
+	const recommendedSuffix = id === recommended ? ' (recommended)' : '';
+	return description
+		? `${name}${recommendedSuffix} — ${description}`
+		: `${name}${recommendedSuffix}`;
 }
 
 // ── Tool factory ───────────────────────────────────────────────────────────
@@ -199,9 +241,13 @@ async function executeOffer(
 		return { eligible: false as const, reason: 'already-configured' as const };
 	}
 
+	// Detect named refs to disclose before approval
+	const agentName = detection.aiNodeNames[0];
+	const namedRefs = detectAgentNamedRefs(wf, agentName);
+
 	await suspend?.({
 		requestId: nanoid(),
-		message: offerMessage(detection.aiNodeNames),
+		message: composeOfferMessage(detection.aiNodeNames, namedRefs),
 		severity: 'info' as const,
 	});
 	return { eligible: true as const, approved: false as const };
@@ -227,16 +273,20 @@ async function executeSelectMetrics(
 
 	if (resumeData !== undefined && resumeData !== null) {
 		if (!resumeData.approved || !resumeData.answers) {
-			return { chosenMetricIds: ['correctness'] };
+			return { chosenMetricIds: ['correctness'], answers: resumeData?.answers ?? [] };
 		}
 		const selected = resumeData.answers[0]?.selectedOptions ?? [];
 		const ids = selected.map(labelToId).filter((x): x is string => x !== undefined);
-		return { chosenMetricIds: ids.length > 0 ? ids : ['correctness'] };
+		return {
+			chosenMetricIds: ids.length > 0 ? ids : ['correctness'],
+			answers: resumeData.answers,
+		};
 	}
 
 	const defaults = proposeDefaultMetricIds(wf, agentName);
-	const allLabels = METRIC_IDS.map(metricLabel);
-	const defaultLabels = defaults.map(metricLabel);
+	const recommended = recommendedMetricId(wf, agentName);
+	const allLabels = METRIC_IDS.map((id) => metricLabel(wf, agentName, id, recommended));
+	const defaultLabels = defaults.map((id) => METRIC_CATALOG[id].name);
 
 	const questionId = nanoid();
 	await suspend?.({
@@ -272,7 +322,12 @@ async function executePropose(context: InstanceAiContext, input: z.infer<typeof 
 	}
 
 	const agentName = detection.aiNodeNames[0];
-	const { inputColumns } = analyzeAgentInputColumns(wf, agentName);
+	const { inputColumns: directColumns } = analyzeAgentInputColumns(wf, agentName);
+	const namedRefs = detectAgentNamedRefs(wf, agentName);
+	const namedRefColumns = namedRefs.map((r) => r.column);
+
+	// Combined column list: direct $json refs + named-ref-derived columns.
+	const inputColumns = [...new Set([...directColumns, ...namedRefColumns])];
 
 	// metrics may be undefined when sanitizeInputSchema flattens the discriminated union
 	let resolvedMetrics = getMetricsByIds(input.metrics ?? []);
@@ -309,6 +364,7 @@ async function executePropose(context: InstanceAiContext, input: z.infer<typeof 
 		suggestedInputColumns: inputColumns,
 		suggestedOutputColumns: [],
 		enabledMetrics: resolvedMetrics,
+		namedRefs,
 	});
 
 	return {
