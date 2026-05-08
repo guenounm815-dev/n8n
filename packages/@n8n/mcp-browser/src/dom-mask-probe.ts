@@ -86,7 +86,7 @@ export function structuralProbe(
 		return false;
 	}
 
-	// Walk up to a stable ancestor (form/section/aside/article/main, or 3
+	// Walk up to a stable ancestor (form/section/aside/article/main, or 4
 	// levels max) so we mask a sensible container — not the entire body.
 	function ancestorContainer(start: Element): Element | null {
 		const stops = new Set(['FORM', 'SECTION', 'ASIDE', 'ARTICLE', 'MAIN', 'DIV']);
@@ -197,7 +197,7 @@ export function structuralProbe(
 
 	// Pass E — Reveal-button + copy-button container detection (non-dialog
 	// pages, e.g. Stripe /keys). For each copy-button, walk to a stable
-	// ancestor (Form/Section/Aside/Article/Main/Div within 3 levels). If
+	// ancestor (Form/Section/Aside/Article/Main/Div within 4 levels). If
 	// that ancestor also contains a reveal-button (or a sensitive aria-label
 	// element), treat its text as a reveal context. The "+ reveal" join
 	// keeps this from triggering on every page that happens to have a
@@ -229,7 +229,7 @@ export function structuralProbe(
 
 	// Pass F — <code>/<pre>/<kbd> elements inside a sensitive ancestor.
 	// Secrets are almost always rendered in monospace. Treat them as reveal
-	// context only if a nearby ancestor (3 levels) carries a high-confidence
+	// context only if a nearby ancestor (4 levels) carries a high-confidence
 	// signal: sensitive-testid, sensitive-aria-label, or copy-button. Skip
 	// dialog-only ancestors — Pass B already covers those.
 	try {
