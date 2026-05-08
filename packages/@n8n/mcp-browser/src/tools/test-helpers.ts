@@ -72,6 +72,7 @@ export function createMockAdapter() {
 
 		// Inspection
 		snapshot: jest.fn().mockResolvedValue({ tree: '', refCount: 0 }),
+		getStructuralMaskTargets: jest.fn().mockResolvedValue({ passwordValues: [], dialogTexts: [] }),
 		screenshot: jest.fn().mockResolvedValue('base64imagedata'),
 		getContent: jest.fn().mockResolvedValue({
 			html: '<html><body><p>Hello world</p></body></html>',

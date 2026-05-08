@@ -90,6 +90,97 @@ describe('createInspectionTools', () => {
 				expect(mockConnection.adapter.snapshot).toHaveBeenCalledWith('page1', undefined, false);
 			});
 		});
+
+		describe('structural masking integration', () => {
+			it('masks password input values reported by the probe', async () => {
+				mockConnection.adapter.snapshot.mockResolvedValue({
+					tree: '- textbox "Password" [ref=e1]: hunter2',
+					refCount: 1,
+				});
+				mockConnection.adapter.getStructuralMaskTargets.mockResolvedValue({
+					passwordValues: ['hunter2'],
+					dialogTexts: [],
+				});
+
+				const result = await getTool().execute({}, TOOL_CONTEXT);
+				const data = structuredOf(result);
+
+				expect(data.snapshot).not.toContain('hunter2');
+				expect(data.snapshot).toContain('[REDACTED:password]');
+			});
+
+			it('redacts high-entropy strings inside reveal-phrase dialogs', async () => {
+				const secret = 'notreal-IMzLaCKsU6ZxAbt2qFc9XYdRpQ7vNtBmKL';
+				mockConnection.adapter.snapshot.mockResolvedValue({
+					tree: `- dialog [ref=e1]\n  - text [ref=e2]: ${secret}`,
+					refCount: 2,
+				});
+				mockConnection.adapter.getStructuralMaskTargets.mockResolvedValue({
+					passwordValues: [],
+					dialogTexts: [
+						{
+							text: `Save your key ${secret} now — you won't see it again.`,
+							revealPhraseHit: true,
+						},
+					],
+				});
+
+				const result = await getTool().execute({}, TOOL_CONTEXT);
+				const data = structuredOf(result);
+
+				expect(data.snapshot).not.toContain(secret);
+				expect(data.snapshot).toContain('[REDACTED:secret]');
+				// Ref structure must survive masking so the agent can still target elements.
+				expect(data.snapshot).toContain('[ref=e1]');
+				expect(data.snapshot).toContain('[ref=e2]');
+			});
+
+			it('falls back to the unmasked snapshot when the probe throws', async () => {
+				mockConnection.adapter.snapshot.mockResolvedValue({
+					tree: '- heading "Hello"',
+					refCount: 0,
+				});
+				mockConnection.adapter.getStructuralMaskTargets.mockRejectedValue(
+					new Error('probe failed'),
+				);
+
+				const result = await getTool().execute({}, TOOL_CONTEXT);
+				const data = structuredOf(result);
+
+				expect(data.snapshot).toBe('- heading "Hello"');
+			});
+
+			it('also masks the unstructured text content (not just structuredContent)', async () => {
+				const secret = 'notreal-IMzLaCKsU6ZxAbt2qFc9XYdRpQ7vNtBmKL';
+				mockConnection.adapter.snapshot.mockResolvedValue({
+					tree: `- dialog [ref=e1]\n  - text [ref=e2]: ${secret}`,
+					refCount: 2,
+				});
+				mockConnection.adapter.getStructuralMaskTargets.mockResolvedValue({
+					passwordValues: [],
+					dialogTexts: [
+						{
+							text: `Save your key ${secret} now — you won't see it again.`,
+							revealPhraseHit: true,
+						},
+					],
+				});
+
+				const result = await getTool().execute({}, TOOL_CONTEXT);
+
+				// Both halves of the MCP response must be masked — MCP clients can
+				// surface either structuredContent or content[0].text to the model.
+				const textBlock = result.content[0];
+				expect(textBlock.type).toBe('text');
+				if (textBlock.type === 'text') {
+					expect(textBlock.text).not.toContain(secret);
+					expect(textBlock.text).toContain('[REDACTED:secret]');
+				}
+				const data = structuredOf(result);
+				expect(data.snapshot).not.toContain(secret);
+				expect(data.snapshot).toContain('[REDACTED:secret]');
+			});
+		});
 	});
 
 	// -----------------------------------------------------------------------

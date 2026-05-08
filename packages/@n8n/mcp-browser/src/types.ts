@@ -2,6 +2,7 @@ import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 
 import type { BrowserConnection as BrowserConnectionType } from './connection';
+import type { MaskTargets } from './dom-mask';
 import type { ConnectionLostReason } from './errors';
 
 // ---------------------------------------------------------------------------
@@ -92,6 +93,7 @@ export interface Adapter {
 	dialog(pageId: string, action: 'accept' | 'dismiss', text?: string): Promise<string>;
 	// Inspection
 	snapshot(pageId: string, target?: ElementTarget, interactive?: boolean): Promise<SnapshotResult>;
+	getStructuralMaskTargets(pageId: string): Promise<MaskTargets>;
 	screenshot(pageId: string, target?: ElementTarget, options?: ScreenshotOptions): Promise<string>;
 	getText(pageId: string, target?: ElementTarget): Promise<string>;
 	getContent(pageId: string, selector?: string): Promise<{ html: string; url: string }>;

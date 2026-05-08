@@ -1,4 +1,5 @@
 import type { BrowserConnection } from '../connection';
+import { applyDomMask } from '../dom-mask';
 import { McpBrowserError } from '../errors';
 import { createLogger } from '../logger';
 import type { CallToolResult, ConnectionState, ModalState } from '../types';
@@ -18,6 +19,24 @@ export function resolvePageContext(
 	const state = connection.getConnection();
 	const pageId = args.pageId ?? state.activePageId;
 	return { state, pageId };
+}
+
+// ---------------------------------------------------------------------------
+// Snapshot masking
+// ---------------------------------------------------------------------------
+
+/**
+ * Apply DOM-level structural masking to a snapshot. Probe failures fall back
+ * to returning the original tree so a single broken probe never silences the
+ * snapshot (the page-level redaction layer above this still applies).
+ */
+async function maskSnapshot(state: ConnectionState, pageId: string, tree: string): Promise<string> {
+	try {
+		const targets = await state.adapter.getStructuralMaskTargets(pageId);
+		return applyDomMask(tree, targets);
+	} catch {
+		return tree;
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -43,10 +62,13 @@ export async function enrichResponse(
 	if (options.autoSnapshot) {
 		try {
 			const snap = await state.adapter.snapshot(pageId);
-			record.snapshot = snap.tree;
+			record.snapshot = await maskSnapshot(state, pageId, snap.tree);
 		} catch {
 			// Snapshot failure shouldn't break the tool response
 		}
+	} else if (typeof record.snapshot === 'string' && record.snapshot.length > 0) {
+		// browser_snapshot writes its own snapshot field; mask it too.
+		record.snapshot = await maskSnapshot(state, pageId, record.snapshot);
 	}
 
 	try {
@@ -83,6 +105,23 @@ export async function enrichResponse(
 			// Tab diff failure shouldn't break the response
 		}
 	}
+
+	// Re-serialize the unstructured text-content block from the (possibly
+	// mutated) structuredContent. `formatCallToolResult` JSON-stringifies the
+	// data into content[0].text BEFORE we run enrichment / masking, so without
+	// this sync the text-content side leaks anything we redacted.
+	syncTextContent(result, record);
+}
+
+/**
+ * Re-serialize the leading text-content block from `structuredContent`. Skips
+ * results that don't follow the formatCallToolResult shape (e.g.
+ * formatImageResponse where content[0] is an image).
+ */
+function syncTextContent(result: CallToolResult, record: Record<string, unknown>): void {
+	const first = result.content?.[0];
+	if (!first || first.type !== 'text') return;
+	first.text = JSON.stringify(record, null, 2);
 }
 
 // ---------------------------------------------------------------------------
@@ -114,7 +153,7 @@ export async function buildErrorResponse(
 		if (options.autoSnapshot) {
 			try {
 				const snap = await state.adapter.snapshot(pageId);
-				errorData.snapshot = snap.tree;
+				errorData.snapshot = await maskSnapshot(state, pageId, snap.tree);
 			} catch {
 				// Snapshot failure on error path is expected
 			}

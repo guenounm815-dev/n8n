@@ -258,6 +258,63 @@ describe('AgentBrowserAdapter', () => {
 	});
 
 	// =========================================================================
+	// getStructuralMaskTargets
+	// =========================================================================
+
+	describe('getStructuralMaskTargets', () => {
+		beforeEach(async () => {
+			await withActiveTab();
+		});
+
+		it('runs the structural probe via base64-encoded eval', async () => {
+			stubRun({
+				success: true,
+				data: { origin: 'http://test.com', result: { passwordValues: [], dialogTexts: [] } },
+			});
+			await adapter.getStructuralMaskTargets('t1');
+			const args = getRunArgs(0);
+			expect(args[0]).toBe('eval');
+			expect(args[1]).toBe('-b');
+			const decoded = Buffer.from(args[2], 'base64').toString('utf8');
+			expect(decoded).toContain("querySelectorAll('input')");
+			expect(decoded).toContain('querySelectorAll(\'[role="dialog"]');
+		});
+
+		it('unwraps the { origin, result } envelope and returns parsed mask targets', async () => {
+			stubRun({
+				success: true,
+				data: {
+					origin: 'http://test.com',
+					result: {
+						passwordValues: ['hunter2'],
+						dialogTexts: [{ text: 'Save your key abcdef', revealPhraseHit: true }],
+					},
+				},
+			});
+			const result = await adapter.getStructuralMaskTargets('t1');
+			expect(result).toEqual({
+				passwordValues: ['hunter2'],
+				dialogTexts: [{ text: 'Save your key abcdef', revealPhraseHit: true }],
+			});
+		});
+
+		it('falls back to raw data when the probe response has no result envelope', async () => {
+			stubRun({
+				success: true,
+				data: { passwordValues: ['unwrapped'], dialogTexts: [] },
+			});
+			const result = await adapter.getStructuralMaskTargets('t1');
+			expect(result.passwordValues).toEqual(['unwrapped']);
+		});
+
+		it('returns empty targets when probe data is malformed', async () => {
+			stubRun({ success: true, data: 'not an object' });
+			const result = await adapter.getStructuralMaskTargets('t1');
+			expect(result).toEqual({ passwordValues: [], dialogTexts: [] });
+		});
+	});
+
+	// =========================================================================
 	// click
 	// =========================================================================
 

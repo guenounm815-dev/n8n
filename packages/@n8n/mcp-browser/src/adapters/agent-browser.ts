@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 
 import { CDPRelayServer } from '../cdp-relay';
+import { parseMaskTargets, STRUCTURAL_PROBE_SCRIPT, type MaskTargets } from '../dom-mask';
 import {
 	BrowserExecutableNotFoundError,
 	PageNotFoundError,
@@ -435,6 +436,18 @@ export class AgentBrowserAdapter implements Adapter {
 			typeof response.data === 'string' ? response.data : JSON.stringify(response.data ?? '');
 		const refCount = (tree.match(/@e\d+/g) ?? []).length;
 		return { tree: tree || '(empty page)', refCount };
+	}
+
+	async getStructuralMaskTargets(pageId: string): Promise<MaskTargets> {
+		await this.switchToTab(pageId);
+		const encoded = Buffer.from(STRUCTURAL_PROBE_SCRIPT).toString('base64');
+		const resp = await this.run(['eval', '-b', encoded]);
+		// agent-browser wraps eval results as { origin, result }
+		const raw =
+			resp.data && typeof resp.data === 'object' && 'result' in resp.data
+				? (resp.data as { result: unknown }).result
+				: resp.data;
+		return parseMaskTargets(raw);
 	}
 
 	async screenshot(

@@ -12,6 +12,7 @@ import type {
 import { chromium } from 'playwright-core';
 
 import { CDPRelayServer } from '../cdp-relay';
+import { parseMaskTargets, STRUCTURAL_PROBE_SCRIPT, type MaskTargets } from '../dom-mask';
 import {
 	BrowserExecutableNotFoundError,
 	PageNotFoundError,
@@ -520,6 +521,12 @@ export class PlaywrightAdapter {
 		const refCount = refMatches?.length ?? 0;
 
 		return { tree: yaml, refCount };
+	}
+
+	async getStructuralMaskTargets(pageId: string): Promise<MaskTargets> {
+		const { page } = await this.ensurePage(pageId);
+		const raw = await page.evaluate<unknown>(STRUCTURAL_PROBE_SCRIPT);
+		return parseMaskTargets(raw);
 	}
 
 	async getText(pageId: string, target?: ElementTarget): Promise<string> {
