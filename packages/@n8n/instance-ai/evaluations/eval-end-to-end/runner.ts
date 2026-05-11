@@ -87,7 +87,7 @@ export function buildEvalPrompt(input: {
 		`Add a complete evaluation suite to workflow ${input.workflowId} (${input.workflowName}).`,
 		'1. Use the evals + eval-setup-with-agent flow to add EvaluationTrigger and Evaluation nodes that target each AI agent independently.',
 		'2. After eval setup completes, call the eval-data tool to populate the new DataTable with synthetic sample rows so the eval workflow can be executed.',
-		'Approve any confirmation dialogs for workflow updates and DataTable inserts that appear.',
+		'Approve any eval confirmation dialogs (metric selection, data-population offer) that appear.',
 	].join('\n');
 }
 
@@ -102,14 +102,23 @@ export function extractConfirmationRequestId(event: CapturedEvent): string | und
 	return undefined;
 }
 
+const EVALS_TOOL_NAME = 'evals';
+
 export function isApprovableConfirmation(event: CapturedEvent): boolean {
 	if (event.type !== 'confirmation-request') {
 		return false;
 	}
-	// In the end-to-end suite the runner runs in a sandbox project — auto-approve
-	// every confirmation surface (workflow updates, DataTable inserts, etc.) so
-	// the chain (evals → eval-setup → eval-data) can settle without human input.
-	return true;
+	// Only auto-approve confirmations emitted by the `evals` tool
+	// (select-metrics, offer-data-population). The `offer` action no longer
+	// suspends — it returns a chat message and the user replies naturally —
+	// so it never reaches this path. Confirmations from any other tool
+	// (e.g. credentials/workflow setup, build-workflow update prompts) are
+	// intentionally left untouched: in the end-to-end suite they would
+	// indicate the agent wandered off the eval chain, and a stalled thread
+	// is the signal we want — not a silent auto-approve that masks the drift.
+	const payload = event.data.payload;
+	if (!isRecord(payload)) return false;
+	return payload.toolName === EVALS_TOOL_NAME;
 }
 
 export async function startSseConnection(
@@ -605,36 +614,55 @@ async function runEvalExecutionForMode(input: {
 }
 
 /**
- * Drop tool-call findings that don't apply to the case's mode. For
- * `already-configured` and `no-ai-nodes` workflows the agent is EXPECTED
- * not to call the eval setup chain, so the absence of those tool calls is
- * not a failure.
+ * Resolve tool-selection findings for the case's mode.
+ *
+ * - `eligible`: keep every "X not called" finding from `extractToolSelection`.
+ * - `already-configured` / `no-ai-nodes`: the agent must NOT add new evals.
+ *   Drop the "not called" findings (the absence is correct), and ADD findings
+ *   for any chain tool that WAS called — that's the real bug in these modes.
  */
 export function filterToolSelectionForMode(
 	raw: EvalEndToEndToolSelectionResult,
 	mode: EvalEndToEndMode,
 ): EvalEndToEndToolSelectionResult {
-	// `eligible` is the only mode that requires the full chain — every other
-	// mode (already-configured, no-ai-nodes) must NOT call the chain because
-	// eval setup is either already done or not applicable.
 	if (mode === 'eligible') return raw;
+
+	const findings = raw.findings.filter(
+		(finding) =>
+			finding.code !== 'evals_tool_not_called' &&
+			finding.code !== 'evals_propose_not_called' &&
+			finding.code !== 'eval_setup_agent_not_called' &&
+			finding.code !== 'eval_data_tool_not_called',
+	);
+
+	if (raw.evalSetupAgentCalled) {
+		findings.push({
+			severity: 'error',
+			code: 'eval_setup_agent_unexpectedly_called',
+			message: `Workflow mode is ${mode} but the agent invoked eval-setup-with-agent anyway.`,
+		});
+	}
+	if (raw.evalDataToolCalled) {
+		findings.push({
+			severity: 'error',
+			code: 'eval_data_tool_unexpectedly_called',
+			message: `Workflow mode is ${mode} but the agent invoked eval-data anyway.`,
+		});
+	}
 
 	return {
 		evalsToolCalled: raw.evalsToolCalled,
+		evalsActionsCalled: raw.evalsActionsCalled,
 		evalSetupAgentCalled: raw.evalSetupAgentCalled,
 		evalDataToolCalled: raw.evalDataToolCalled,
-		findings: raw.findings.filter(
-			(finding) =>
-				finding.code !== 'evals_tool_not_called' &&
-				finding.code !== 'eval_setup_agent_not_called' &&
-				finding.code !== 'eval_data_tool_not_called',
-		),
+		findings,
 	};
 }
 
-function emptyToolSelection() {
+function emptyToolSelection(): EvalEndToEndToolSelectionResult {
 	return {
 		evalsToolCalled: false,
+		evalsActionsCalled: [],
 		evalSetupAgentCalled: false,
 		evalDataToolCalled: false,
 		findings: [],
