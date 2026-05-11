@@ -23,6 +23,11 @@ export interface ProbeResult {
 	dialogTexts: Array<{ text: string; revealPhraseHit: boolean }>;
 }
 
+/* istanbul ignore next -- the function body is serialized via .toString() and
+   eval'd in a foreign context (jsdom, agent-browser CLI, page.evaluate). Any
+   Istanbul counters injected here reference a module-scope cov_* variable that
+   doesn't survive the .toString() trip and crashes the probe when running
+   tests under coverage. */
 export function structuralProbe(
 	revealPatternSources: readonly string[],
 	copyButtonPatternSource: string,
