@@ -68,7 +68,7 @@ describe('eval-end-to-end runner — pure helpers', () => {
 	});
 
 	describe('buildEvalPrompt', () => {
-		it('asks the agent to add evals AND populate the dataset for an eligible workflow', () => {
+		it('asks the agent to add test cases AND seed sample inputs for an eligible workflow', () => {
 			const prompt = buildEvalPrompt({
 				workflowId: 'wf-1',
 				workflowName: 'Demo',
@@ -76,8 +76,8 @@ describe('eval-end-to-end runner — pure helpers', () => {
 			});
 			expect(prompt).toContain('wf-1');
 			expect(prompt).toContain('Demo');
-			expect(prompt).toContain('EvaluationTrigger');
-			expect(prompt).toContain('eval-data');
+			expect(prompt).toContain('test cases');
+			expect(prompt).toContain('sample input rows');
 		});
 
 		it('tells the agent NOT to add new evals when the workflow is already configured', () => {

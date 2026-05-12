@@ -84,10 +84,9 @@ export function buildEvalPrompt(input: {
 	}
 
 	return [
-		`Add a complete evaluation suite to workflow ${input.workflowId} (${input.workflowName}).`,
-		'1. Use the evals + eval-setup-with-agent flow to add EvaluationTrigger and Evaluation nodes that target each AI agent independently.',
-		'2. After eval setup completes, call the eval-data tool to populate the new DataTable with synthetic sample rows so the eval workflow can be executed.',
-		'Approve any eval confirmation dialogs (metric selection, data-population offer) that appear.',
+		`I want to add test cases to workflow ${input.workflowId} (${input.workflowName}) so I can check it keeps producing the right answers when I change prompts or models later.`,
+		'Please set the whole thing up: wire test cases against each AI agent in the workflow, and seed the table with some sample input rows so I have something to run against.',
+		'Go ahead and approve any confirmation dialogs you show me along the way.',
 	].join('\n');
 }
 
