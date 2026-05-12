@@ -15,6 +15,7 @@ import { type MockedStore, mockedStore } from '@/__tests__/utils';
 
 const { mockWorkflowDocumentStore } = vi.hoisted(() => ({
 	mockWorkflowDocumentStore: {
+		workflowId: 'test-workflow',
 		getNodeByName: vi.fn(),
 		getChildNodes: vi.fn().mockReturnValue([]),
 		allNodes: [] as Array<{ id: string; name: string; type: string }>,
@@ -128,8 +129,6 @@ describe('FromAiParametersModal', () => {
 					modalStack: [FROM_AI_PARAMETERS_MODAL_KEY],
 				},
 				[STORES.WORKFLOWS]: {
-					workflow: mockWorkflow,
-					workflowId: 'test-workflow',
 					workflowExecutionData: mockRunData,
 				},
 			},

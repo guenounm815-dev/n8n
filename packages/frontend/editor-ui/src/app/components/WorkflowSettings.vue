@@ -186,7 +186,7 @@ const readOnlyEnv = computed(
 	() => sourceControlStore.preferences.branchReadOnly || collaborationStore.shouldBeReadOnly,
 );
 const workflowName = computed(() => workflowDocumentStore.value.name);
-const workflowId = computed(() => workflowsStore.workflowId);
+const workflowId = computed(() => workflowDocumentStore.value.workflowId);
 const workflow = computed(() => workflowsListStore.getWorkflowById(workflowId.value));
 const isSharingEnabled = computed(
 	() => settingsStore.isEnterpriseFeatureEnabled[EnterpriseEditionFeature.Sharing],
@@ -618,7 +618,7 @@ const saveSettings = async () => {
 
 	void externalHooks.run('workflowSettings.saveSettings', { oldSettings: { ...oldSettings } });
 	telemetry.track('User updated workflow settings', {
-		workflow_id: workflowsStore.workflowId,
+		workflow_id: workflowDocumentStore.value.workflowId,
 		// null and undefined values are removed from the object, but we need the keys to be there
 		time_saved: workflowSettings.value.timeSavedPerExecution ?? '',
 		error_workflow: workflowSettings.value.errorWorkflow ?? '',
@@ -682,7 +682,7 @@ onMounted(async () => {
 	executionTimeout.value = rootStore.executionTimeout;
 	maxExecutionTimeout.value = rootStore.maxExecutionTimeout;
 
-	if (!workflowsStore.isWorkflowSaved[workflowsStore.workflowId]) {
+	if (!workflowsStore.isWorkflowSaved[workflowDocumentStore.value.workflowId]) {
 		toast.showMessage({
 			title: 'No workflow active',
 			message: 'No workflow active to display settings of.',
@@ -796,7 +796,7 @@ onMounted(async () => {
 		dialogVisible: true,
 	});
 	telemetry.track('User opened workflow settings', {
-		workflow_id: workflowsStore.workflowId,
+		workflow_id: workflowDocumentStore.value.workflowId,
 	});
 
 	// Register custom action for opening SavedTime node creator
