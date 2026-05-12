@@ -1,5 +1,6 @@
 import { computed, h } from 'vue';
 import { useWorkflowsStore } from '@/app/stores/workflows.store';
+import { injectWorkflowDocumentStore } from '@/app/stores/workflowDocument.store';
 import { useMessage } from '@/app/composables/useMessage';
 import { useTelemetry } from '@/app/composables/useTelemetry';
 import { useToast } from '@/app/composables/useToast';
@@ -9,6 +10,7 @@ import RevealDataWarning from '../components/RevealDataWarning.vue';
 
 export function useExecutionRedaction() {
 	const workflowsStore = useWorkflowsStore();
+	const workflowDocumentStore = injectWorkflowDocumentStore();
 	const message = useMessage();
 	const telemetry = useTelemetry();
 	const { showError } = useToast();
@@ -26,7 +28,7 @@ export function useExecutionRedaction() {
 
 	async function revealData() {
 		telemetry.track('User clicked reveal data', {
-			workflow_id: workflowsStore.workflowId,
+			workflow_id: workflowDocumentStore.value.workflowId,
 			execution_id: workflowsStore.getWorkflowExecution?.id,
 		});
 

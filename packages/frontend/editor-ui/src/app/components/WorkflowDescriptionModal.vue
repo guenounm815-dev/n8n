@@ -15,6 +15,7 @@ import { WORKFLOW_DESCRIPTION_MODAL_KEY } from '../constants';
 import { createEventBus } from '@n8n/utils/event-bus';
 import Modal from './Modal.vue';
 import { onMounted } from 'vue';
+import { useWorkflowId } from '../composables/useWorkflowId';
 
 const props = defineProps<{
 	modalName: string;
@@ -59,7 +60,7 @@ const textareaTip = computed(() =>
 async function saveWorkflowDescription(id: string, description: string | null) {
 	let currentVersionId = '';
 	let currentChecksum = '';
-	const isCurrentWorkflow = id === workflowsStore.workflowId;
+	const isCurrentWorkflow = !!useWorkflowId().value; // empty string if not in the canvas
 
 	if (isCurrentWorkflow) {
 		const workflowDocumentStore = useWorkflowDocumentStore(createWorkflowDocumentId(id));

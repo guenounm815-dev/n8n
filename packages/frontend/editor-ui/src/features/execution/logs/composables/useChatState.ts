@@ -139,7 +139,7 @@ export function useChatState(
 		}
 
 		// Must have a valid workflow ID (for new workflows, this might not be set until saved)
-		if (!workflowsStore.workflowId && !workflowsStore.isNewWorkflow) {
+		if (!workflowDocumentStore.value.workflowId && !workflowsStore.isNewWorkflow) {
 			return false;
 		}
 
@@ -151,7 +151,7 @@ export function useChatState(
 			return '';
 		}
 
-		const workflowId = workflowsStore.workflowId;
+		const workflowId = workflowDocumentStore.value.workflowId;
 		if (!workflowId) {
 			return '';
 		}
@@ -342,13 +342,13 @@ export function useChatState(
 	function displayExecution(executionId: string) {
 		const route = router.resolve({
 			name: VIEWS.EXECUTION_PREVIEW,
-			params: { workflowId: workflowsStore.workflowId, executionId },
+			params: { workflowId: workflowDocumentStore.value.workflowId, executionId },
 		});
 		window.open(route.href, '_blank');
 	}
 
 	watch(
-		() => workflowsStore.workflowId,
+		() => workflowDocumentStore.value.workflowId,
 		(_newWorkflowId, prevWorkflowId) => {
 			if (!prevWorkflowId) {
 				return;

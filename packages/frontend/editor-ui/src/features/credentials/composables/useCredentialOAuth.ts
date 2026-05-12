@@ -7,7 +7,7 @@ import { createResultError, createResultOk, type GenericValue, type Result } fro
 import { useCredentialsStore } from '../credentials.store';
 import type { ICredentialsResponse } from '../credentials.types';
 import { useTelemetry } from '@/app/composables/useTelemetry';
-import { useWorkflowsStore } from '@/app/stores/workflows.store';
+import { injectWorkflowDocumentStore } from '@/app/stores/workflowDocument.store';
 
 /**
  * Composable for OAuth credential type detection and authorization.
@@ -16,7 +16,7 @@ import { useWorkflowsStore } from '@/app/stores/workflows.store';
 export function useCredentialOAuth() {
 	const credentialsStore = useCredentialsStore();
 	const projectsStore = useProjectsStore();
-	const workflowsStore = useWorkflowsStore();
+	const workflowDocumentStore = injectWorkflowDocumentStore();
 
 	const toast = useToast();
 	const i18n = useI18n();
@@ -249,7 +249,7 @@ export function useCredentialOAuth() {
 			telemetry.track('User created credentials', {
 				credential_type: credential.type,
 				credential_id: credential.id,
-				workflow_id: workflowsStore.workflowId,
+				workflow_id: workflowDocumentStore.value.workflowId,
 			});
 		} catch (error) {
 			toast.showError(error, i18n.baseText('nodeCredentials.showMessage.title'));
@@ -267,7 +267,7 @@ export function useCredentialOAuth() {
 
 		const trackProperties: Record<string, GenericValue> = {
 			credential_type: credentialTypeName,
-			workflow_id: workflowsStore.workflowId ?? null,
+			workflow_id: workflowDocumentStore.value.workflowId ?? null,
 			credential_id: credential.id,
 			is_complete: true,
 			is_new: true,

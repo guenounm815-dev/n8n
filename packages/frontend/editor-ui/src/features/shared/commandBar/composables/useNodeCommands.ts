@@ -51,7 +51,7 @@ export function useNodeCommands(options: {
 
 	const hasPermission = (permission: keyof typeof workflowPermissions.value) =>
 		(workflowPermissions.value[permission] === true && !isReadOnly.value && !isArchived.value) ||
-		!workflowsStore.isWorkflowSaved[workflowsStore.workflowId];
+		!workflowsStore.isWorkflowSaved[workflowDocumentStore.value.workflowId];
 
 	const mergedNodes = computed(() => {
 		const httpOnlyCredentials = credentialsStore.httpOnlyCredentialTypes;

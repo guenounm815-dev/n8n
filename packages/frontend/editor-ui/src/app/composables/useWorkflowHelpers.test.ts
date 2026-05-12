@@ -672,6 +672,11 @@ describe('useWorkflowHelpers', () => {
 	});
 
 	describe('executeData', () => {
+		beforeEach(() => {
+			const store = useWorkflowDocumentStore(createWorkflowDocumentId('test-workflow'));
+			vi.mocked(store.getPinDataSnapshot).mockReturnValue({});
+		});
+
 		it('should return empty execute data if no parent nodes', () => {
 			const { executeData } = useWorkflowHelpers();
 
@@ -680,7 +685,14 @@ describe('useWorkflowHelpers', () => {
 			const inputName = 'main';
 			const runIndex = 0;
 
-			const result = executeData({}, parentNodes, currentNode, inputName, runIndex);
+			const result = executeData(
+				{},
+				parentNodes,
+				currentNode,
+				inputName,
+				runIndex,
+				'test-workflow',
+			);
 
 			expect(result).toEqual({
 				node: {},
@@ -739,6 +751,7 @@ describe('useWorkflowHelpers', () => {
 				currentNode,
 				inputName,
 				runIndex,
+				'test-workflow',
 			);
 
 			expect(result).toEqual({
@@ -813,6 +826,7 @@ describe('useWorkflowHelpers', () => {
 				currentNode,
 				inputName,
 				runIndex,
+				'test-workflow',
 			);
 
 			expect(result).toEqual({
@@ -913,6 +927,7 @@ describe('useWorkflowHelpers', () => {
 				currentNode,
 				inputName,
 				runIndex,
+				'test-workflow',
 			);
 
 			expect(result).toEqual({
@@ -945,7 +960,6 @@ describe('useWorkflowHelpers', () => {
 			const inputName = 'main';
 			const runIndex = 0;
 
-			workflowsStore.workflowId = 'test-workflow';
 			const workflowDocumentStore = useWorkflowDocumentStore(
 				createWorkflowDocumentId('test-workflow'),
 			);
@@ -953,7 +967,14 @@ describe('useWorkflowHelpers', () => {
 				ParentNode: [{ json: { key: 'value' } }],
 			});
 
-			const result = executeData({}, parentNodes, currentNode, inputName, runIndex);
+			const result = executeData(
+				{},
+				parentNodes,
+				currentNode,
+				inputName,
+				runIndex,
+				'test-workflow',
+			);
 
 			expect(result.data).toEqual({ main: [[{ json: { key: 'value' } }]] });
 			expect(result.source).toEqual({ main: [{ previousNode: 'ParentNode' }] });
@@ -990,6 +1011,7 @@ describe('useWorkflowHelpers', () => {
 				currentNode,
 				inputName,
 				runIndex,
+				'test-workflow',
 			);
 
 			expect(result.data).toEqual({ main: [[{ json: { key: 'valueFromRunData' } }]] });
@@ -1030,6 +1052,7 @@ describe('useWorkflowHelpers', () => {
 				currentNode,
 				inputName,
 				runIndex,
+				'test-workflow',
 				parentRunIndex,
 			);
 
@@ -1049,7 +1072,14 @@ describe('useWorkflowHelpers', () => {
 
 			workflowsStore.getWorkflowRunData = null;
 
-			const result = executeData({}, parentNodes, currentNode, inputName, runIndex);
+			const result = executeData(
+				{},
+				parentNodes,
+				currentNode,
+				inputName,
+				runIndex,
+				'test-workflow',
+			);
 
 			expect(result.data).toEqual({});
 			expect(result.source).toBeNull();

@@ -32,6 +32,7 @@ import { useFocusPanelStore } from '@/app/stores/focusPanel.store';
 import {
 	useWorkflowDocumentStore,
 	createWorkflowDocumentId,
+	injectWorkflowDocumentStore,
 } from '@/app/stores/workflowDocument.store';
 import { getResourcePermissions } from '@n8n/permissions';
 import { useDebounceFn } from '@vueuse/core';
@@ -61,6 +62,7 @@ export function useWorkflowSaving({
 	const builderStore = useBuilderStore();
 
 	const { checkConflictingWebhooks, getWorkflowProjectRole } = useWorkflowHelpers();
+	const workflowDocumentStore = injectWorkflowDocumentStore();
 
 	const saveStore = useWorkflowSaveStore();
 	const backendConnectionStore = useBackendConnectionStore();
@@ -76,14 +78,10 @@ export function useWorkflowSaving({
 			cancel?: () => Promise<void>;
 		} = {},
 	) {
-		const workflowDocumentStore = useWorkflowDocumentStore(
-			createWorkflowDocumentId(workflowsStore.workflowId),
-		);
-
 		if (
 			!uiStore.stateIsDirty ||
-			workflowDocumentStore.isArchived ||
-			!getResourcePermissions(workflowDocumentStore.scopes).workflow.update
+			workflowDocumentStore.value.isArchived ||
+			!getResourcePermissions(workflowDocumentStore.value.scopes).workflow.update
 		) {
 			next();
 			return;
@@ -124,7 +122,7 @@ export function useWorkflowSaving({
 				return;
 			case MODAL_CLOSE:
 				// For new workflows that are not saved yet, don't do anything, only close modal
-				if (workflowsStore.isWorkflowSaved[workflowsStore.workflowId]) {
+				if (workflowsStore.isWorkflowSaved[workflowDocumentStore.value.workflowId]) {
 					stayOnCurrentWorkflow(next);
 				}
 
@@ -137,7 +135,7 @@ export function useWorkflowSaving({
 		next(
 			router.resolve({
 				name: VIEWS.WORKFLOW,
-				params: { workflowId: workflowsStore.workflowId },
+				params: { workflowId: workflowDocumentStore.value.workflowId },
 			}),
 		);
 	}
@@ -202,10 +200,10 @@ export function useWorkflowSaving({
 				// Capture dirty state count before save to detect changes made during save
 				const dirtyCountBeforeSave = uiStore.dirtyStateSetCount;
 
-				const workflowDocumentStore = useWorkflowDocumentStore(
+				const currentDocumentStore = useWorkflowDocumentStore(
 					createWorkflowDocumentId(currentWorkflow),
 				);
-				const workflowDataRequest: WorkflowDataUpdate = workflowDocumentStore.serialize();
+				const workflowDataRequest: WorkflowDataUpdate = currentDocumentStore.serialize();
 				// This can happen if the user has another workflow in the browser history and navigates
 				// via the browser back button, encountering our warning dialog with the new route already set
 				if (workflowDataRequest.id !== currentWorkflow) {
@@ -214,8 +212,8 @@ export function useWorkflowSaving({
 
 				// Check if AI Builder made edits since last save
 				workflowDataRequest.aiBuilderAssisted = builderStore.getAiBuilderMadeEdits();
-				workflowDataRequest.versionId = workflowDocumentStore.versionId;
-				workflowDataRequest.expectedChecksum = workflowDocumentStore.checksum;
+				workflowDataRequest.versionId = currentDocumentStore.versionId;
+				workflowDataRequest.expectedChecksum = currentDocumentStore.checksum;
 				workflowDataRequest.autosaved = autosaved;
 
 				const workflowData = await workflowsStore.updateWorkflow(
@@ -226,12 +224,12 @@ export function useWorkflowSaving({
 				if (!workflowData.checksum) {
 					throw new Error('Failed to update workflow');
 				}
-				workflowDocumentStore.setVersionData({
+				currentDocumentStore.setVersionData({
 					versionId: workflowData.versionId,
 					name: null,
 					description: null,
 				});
-				workflowDocumentStore.setUpdatedAt(workflowData.updatedAt);
+				currentDocumentStore.setUpdatedAt(workflowData.updatedAt);
 
 				// Only mark state clean if no new changes were made during the save
 				if (uiStore.dirtyStateSetCount === dirtyCountBeforeSave) {
@@ -386,10 +384,8 @@ export function useWorkflowSaving({
 			// Capture dirty state count before save to detect changes made during save
 			const dirtyCountBeforeSave = uiStore.dirtyStateSetCount;
 
-			const currentDocumentStore = useWorkflowDocumentStore(
-				createWorkflowDocumentId(workflowsStore.workflowId),
-			);
-			const workflowDataRequest: WorkflowDataCreate = data || currentDocumentStore.serialize();
+			const workflowDataRequest: WorkflowDataCreate =
+				data || workflowDocumentStore.value.serialize();
 			const changedNodes = {} as IDataObject;
 
 			if (requestNewId) {
@@ -471,23 +467,21 @@ export function useWorkflowSaving({
 				}
 			}
 
-			const workflowDocumentStore = useWorkflowDocumentStore(
-				createWorkflowDocumentId(workflowData.id),
-			);
-			workflowDocumentStore.setActiveState({
+			const newDocumentStore = useWorkflowDocumentStore(createWorkflowDocumentId(workflowData.id));
+			newDocumentStore.setActiveState({
 				activeVersionId: workflowData.activeVersionId,
 				activeVersion: workflowData.activeVersion ?? null,
 			});
 			if (workflowData.checksum) {
-				workflowDocumentStore.setChecksum(workflowData.checksum);
+				newDocumentStore.setChecksum(workflowData.checksum);
 			}
 			workflowsStore.setWorkflowId(workflowData.id);
-			workflowDocumentStore.setVersionData({
+			newDocumentStore.setVersionData({
 				versionId: workflowData.versionId,
 				name: null,
 				description: null,
 			});
-			workflowDocumentStore.setUpdatedAt(workflowData.updatedAt);
+			newDocumentStore.setUpdatedAt(workflowData.updatedAt);
 
 			// Only update webhook IDs if we explicitly reset them
 			if (resetWebhookUrls) {
@@ -497,7 +491,7 @@ export function useWorkflowSaving({
 						value: changedNodes[nodeName],
 						name: nodeName,
 					} as IUpdateInformation;
-					workflowDocumentStore.setNodeValue(changes);
+					newDocumentStore.setNodeValue(changes);
 				});
 			}
 

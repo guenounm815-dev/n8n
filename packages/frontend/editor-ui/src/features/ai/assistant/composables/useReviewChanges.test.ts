@@ -84,6 +84,9 @@ const mockWorkflowDocumentStore = reactive({
 	get allNodes() {
 		return mockWorkflowsStore.workflow.nodes;
 	},
+	get workflowId() {
+		return mockWorkflowsStore.workflowId;
+	},
 	getSnapshot: vi.fn().mockReturnValue({}),
 });
 
@@ -120,6 +123,14 @@ vi.mock('@/app/stores/posthog.store', () => ({
 vi.mock('@/features/ai/assistant/chatPanelState.store', () => ({
 	useChatPanelStateStore: () => mockChatPanelStateStore,
 }));
+
+vi.mock('vue-router', async (importOriginal) => {
+	const actual = (await importOriginal()) as object;
+	return {
+		...actual,
+		useRoute: vi.fn(() => ({ name: 'workflow', params: { workflowId: 'test-workflow' } })),
+	};
+});
 
 function makeNode(overrides: Partial<INode> = {}): INode {
 	return {

@@ -161,7 +161,10 @@ export function useRunWorkflow(useRunWorkflowOpts: {
 
 			const runData = workflowsStore.getWorkflowRunData;
 
-			if (uiStore.stateIsDirty || !workflowsStore.isWorkflowSaved[workflowsStore.workflowId]) {
+			if (
+				uiStore.stateIsDirty ||
+				!workflowsStore.isWorkflowSaved[workflowDocumentStore.value.workflowId]
+			) {
 				await workflowSaving.saveCurrentWorkflow();
 			}
 
@@ -314,6 +317,7 @@ export function useRunWorkflow(useRunWorkflowOpts: {
 							name,
 							NodeConnectionTypes.Main,
 							0,
+							workflowDocumentStore.value.workflowId,
 						);
 						sourceData = get(executeData, ['source', NodeConnectionTypes.Main, 0], null);
 					}
@@ -394,7 +398,7 @@ export function useRunWorkflow(useRunWorkflowOpts: {
 					},
 				}),
 				workflowData: {
-					id: workflowsStore.workflowId,
+					id: workflowDocumentStore.value.workflowId,
 					name: workflowData.name!,
 					active: workflowData.active!,
 					createdAt: 0,
@@ -572,7 +576,7 @@ export function useRunWorkflow(useRunWorkflowOpts: {
 
 	async function stopWaitingForWebhook() {
 		try {
-			await workflowsStore.removeTestWebhook(workflowsStore.workflowId);
+			await workflowsStore.removeTestWebhook(workflowDocumentStore.value.workflowId);
 		} catch (error) {
 			toast.showError(error, i18n.baseText('nodeView.showError.stopWaitingForWebhook.title'));
 			return;

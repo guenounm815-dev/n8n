@@ -21,6 +21,7 @@ import type { findWebhook } from '@n8n/rest-api-client/api/webhooks';
 import {
 	useWorkflowDocumentStore,
 	createWorkflowDocumentId,
+	injectWorkflowDocumentStore,
 } from '@/app/stores/workflowDocument.store';
 
 export function useWorkflowActivate() {
@@ -29,6 +30,7 @@ export function useWorkflowActivate() {
 
 	const workflowsStore = useWorkflowsStore();
 	const workflowsListStore = useWorkflowsListStore();
+	const currentWorkflowDocumentStore = injectWorkflowDocumentStore();
 	const uiStore = useUIStore();
 	const telemetry = useTelemetry();
 	const toast = useToast();
@@ -108,7 +110,9 @@ export function useWorkflowActivate() {
 
 		try {
 			const expectedChecksum =
-				workflowId === workflowsStore.workflowId ? workflowDocumentStore.checksum : undefined;
+				workflowId === currentWorkflowDocumentStore.value.workflowId
+					? workflowDocumentStore.checksum
+					: undefined;
 
 			const updatedWorkflow = await workflowsStore.publishWorkflow(workflowId, {
 				versionId,
@@ -126,7 +130,7 @@ export function useWorkflowActivate() {
 				activeVersion: updatedWorkflow.activeVersion,
 			});
 
-			if (workflowId === workflowsStore.workflowId) {
+			if (workflowId === currentWorkflowDocumentStore.value.workflowId) {
 				workflowDocumentStore.setVersionData({
 					versionId: updatedWorkflow.versionId,
 					name: workflowDocumentStore.versionData?.name ?? null,
@@ -195,7 +199,9 @@ export function useWorkflowActivate() {
 		const workflowDocumentStore = useWorkflowDocumentStore(createWorkflowDocumentId(workflowId));
 		try {
 			const expectedChecksum =
-				workflowId === workflowsStore.workflowId ? workflowDocumentStore.checksum : undefined;
+				workflowId === currentWorkflowDocumentStore.value.workflowId
+					? workflowDocumentStore.checksum
+					: undefined;
 
 			await workflowsStore.deactivateWorkflow(workflowId, expectedChecksum);
 			workflowDocumentStore.setActiveState({

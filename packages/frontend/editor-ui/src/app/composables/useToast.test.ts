@@ -7,6 +7,13 @@ import { useUIStore } from '@/app/stores/ui.store';
 import { vi } from 'vitest';
 
 vi.mock('./useTelemetry');
+vi.mock('vue-router', async (importOriginal) => {
+	const actual = (await importOriginal()) as object;
+	return {
+		...actual,
+		useRoute: vi.fn(() => ({ name: 'workflow', params: { workflowId: 'test-workflow' } })),
+	};
+});
 
 describe('useToast', () => {
 	let toast: ReturnType<typeof useToast>;

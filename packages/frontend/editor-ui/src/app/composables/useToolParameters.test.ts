@@ -19,6 +19,7 @@ const { mockWorkflowDocumentStore } = vi.hoisted(() => ({
 		getParentNodes: vi.fn().mockReturnValue([]),
 		allNodes: [],
 		workflowTriggerNodes: [],
+		workflowId: 'test-workflow',
 		name: '',
 		settings: {},
 		getPinDataSnapshot: () => ({}),
@@ -30,6 +31,14 @@ vi.mock('@/app/stores/workflowDocument.store', () => ({
 	injectWorkflowDocumentStore: () => shallowRef(mockWorkflowDocumentStore),
 	createWorkflowDocumentId: vi.fn().mockReturnValue('test-id'),
 }));
+
+vi.mock('vue-router', async (importOriginal) => {
+	const actual = (await importOriginal()) as object;
+	return {
+		...actual,
+		useRoute: vi.fn(() => ({ name: 'workflow', params: { workflowId: 'test-workflow' } })),
+	};
+});
 
 describe('useToolParameters', () => {
 	let workflowsStore: MockedStore<typeof useWorkflowsStore>;

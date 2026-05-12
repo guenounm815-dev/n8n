@@ -27,7 +27,6 @@ import {
 } from '@/app/stores/workflowDocument.store';
 import { useNDVStore } from '@/features/ndv/shared/ndv.store';
 import { useWorkflowImport } from '@/app/composables/useWorkflowImport';
-import { useWorkflowsStore } from '@/app/stores/workflows.store';
 
 interface PostMessageHandlerDeps {
 	workflowState: WorkflowState;
@@ -53,7 +52,6 @@ export function usePostMessageHandler({
 	const nodeHelpers = useNodeHelpers();
 
 	const route = useRoute();
-	const workflowsStore = useWorkflowsStore();
 	const { resetWorkspace, openExecution, fitView } = useCanvasOperations();
 	const { importWorkflowExact } = useWorkflowImport(currentWorkflowDocumentStore, currentNDVStore);
 
@@ -139,7 +137,7 @@ export function usePostMessageHandler({
 
 		await credentialsStore.fetchAllCredentialsForWorkflow({ workflowId: data.workflowData.id });
 
-		const wfId = workflowsStore.workflowId;
+		const wfId = data.workflowData.id;
 		if (wfId) {
 			const workflowDocumentId = createWorkflowDocumentId(wfId);
 			currentWorkflowDocumentStore.value = createWorkflowDocumentStore(workflowDocumentId);

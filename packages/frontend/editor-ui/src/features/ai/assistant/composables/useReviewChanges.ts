@@ -9,7 +9,6 @@ import {
 import { createEventBus } from '@n8n/utils/event-bus';
 import { useI18n } from '@n8n/i18n';
 import { useBuilderStore } from '@/features/ai/assistant/builder.store';
-import { useWorkflowsStore } from '@/app/stores/workflows.store';
 import { injectWorkflowDocumentStore } from '@/app/stores/workflowDocument.store';
 import { useWorkflowHistoryStore } from '@/features/workflows/workflowHistory/workflowHistory.store';
 import { useNodeTypesStore } from '@/app/stores/nodeTypes.store';
@@ -33,7 +32,6 @@ export interface NodeChangeEntry {
 
 export function useReviewChanges() {
 	const builderStore = useBuilderStore();
-	const workflowsStore = useWorkflowsStore();
 	const workflowHistoryStore = useWorkflowHistoryStore();
 	const nodeTypesStore = useNodeTypesStore();
 	const uiStore = useUIStore();
@@ -72,7 +70,7 @@ export function useReviewChanges() {
 		() => builderStore.versionCardMessages,
 		async (cards) => {
 			if (!cards?.length) return;
-			const workflowId = workflowsStore.workflowId;
+			const workflowId = workflowDocumentStore.value.workflowId;
 			for (const card of cards) {
 				const vid = card.data.versionId;
 				if (versionDataCache.value.has(vid) || fetchingVersionIds.value.has(vid)) continue;

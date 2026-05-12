@@ -4,7 +4,6 @@ import { setActivePinia } from 'pinia';
 import { createTestingPinia } from '@pinia/testing';
 import { jsonParse } from 'n8n-workflow';
 import { usePostMessageHandler } from './usePostMessageHandler';
-import { useWorkflowsStore } from '@/app/stores/workflows.store';
 import { useUIStore } from '@/app/stores/ui.store';
 import type { WorkflowState } from '@/app/composables/useWorkflowState';
 import type { IExecutionResponse } from '@/features/execution/executions/executions.types';
@@ -417,17 +416,11 @@ describe('usePostMessageHandler', () => {
 		});
 
 		it('should set currentWorkflowDocumentStore after opening execution', async () => {
-			const workflowsStore = useWorkflowsStore();
-
-			mockOpenExecution.mockImplementation(async () => {
-				// Simulate what openExecution does: sets workflowId on the store
-				workflowsStore.workflowId = 'test-wf-id';
-				return {
-					workflowData: { id: 'test-wf-id', name: 'Test' },
-					mode: 'trigger',
-					finished: true,
-				};
-			});
+			mockOpenExecution.mockImplementation(async () => ({
+				workflowData: { id: 'test-wf-id', name: 'Test' },
+				mode: 'trigger',
+				finished: true,
+			}));
 
 			const storeRef = shallowRef(null);
 			const { setup, cleanup } = usePostMessageHandler({

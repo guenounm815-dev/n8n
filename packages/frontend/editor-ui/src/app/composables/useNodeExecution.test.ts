@@ -74,6 +74,7 @@ const {
 		getStartNode: vi.fn(),
 		checkIfNodeHasChatParent: vi.fn(),
 		pinData: {} as Record<string, unknown>,
+		workflowId: '123',
 	},
 	mockNodeHelpers: {
 		getNodeInputData: vi.fn().mockReturnValue([]),

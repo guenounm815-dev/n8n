@@ -170,7 +170,7 @@ export function useLogsExecutionData({ isEnabled, filter }: UseLogsExecutionData
 	);
 
 	watch(
-		() => workflowsStore.workflowId,
+		() => workflowDocumentStore.value.workflowId,
 		() => {
 			resetExecutionData();
 		},

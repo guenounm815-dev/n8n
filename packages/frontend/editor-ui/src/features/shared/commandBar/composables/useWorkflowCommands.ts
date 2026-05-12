@@ -76,7 +76,7 @@ export function useWorkflowCommands(): CommandGroup {
 
 	const hasPermission = (permission: keyof typeof workflowPermissions.value) =>
 		(workflowPermissions.value[permission] === true && !isReadOnly.value) ||
-		!workflowsStore.isWorkflowSaved[workflowsStore.workflowId];
+		!workflowsStore.isWorkflowSaved[workflowDocumentStore.value.workflowId];
 
 	const credentialCommands = computed<CommandBarItem[]>(() => {
 		const credentials = uniqBy(
@@ -280,7 +280,7 @@ export function useWorkflowCommands(): CommandGroup {
 							uiStore.openModalWithData({
 								name: DUPLICATE_MODAL_KEY,
 								data: {
-									id: workflowsStore.workflowId,
+									id: workflowDocumentStore.value.workflowId,
 									name: workflowDocumentStore.value.name,
 									tags: workflowDocumentStore.value.tags,
 								},

@@ -30,6 +30,17 @@ vi.mock('@/app/composables/useTelemetry', () => {
 	};
 });
 
+vi.mock('vue-router', async (importOriginal) => {
+	const actual = (await importOriginal()) as object;
+	return {
+		...actual,
+		useRoute: vi.fn(() => ({
+			name: 'workflow',
+			params: { workflowId: 'test-workflow-id' },
+		})),
+	};
+});
+
 const initialState = {
 	[STORES.SETTINGS]: {
 		settings: {

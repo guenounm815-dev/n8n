@@ -3,8 +3,8 @@ import { useRoute, useRouter } from 'vue-router';
 import { useTelemetry } from '@/app/composables/useTelemetry';
 import { useRootStore } from '@n8n/stores/useRootStore';
 import { useUsersStore } from '@/features/settings/users/users.store';
-import { useWorkflowsStore } from '@/app/stores/workflows.store';
 import { useWorkflowsListStore } from '@/app/stores/workflowsList.store';
+import { injectWorkflowDocumentStore } from '@/app/stores/workflowDocument.store';
 import { useNodeTypesStore } from '@/app/stores/nodeTypes.store';
 import { updateCurrentUserSettings } from '@n8n/rest-api-client/api/users';
 import { VIEWS } from '@/app/constants';
@@ -24,8 +24,8 @@ export function useCalloutHelpers() {
 	const telemetry = useTelemetry();
 
 	const rootStore = useRootStore();
-	const workflowsStore = useWorkflowsStore();
 	const workflowsListStore = useWorkflowsListStore();
+	const workflowDocumentStore = injectWorkflowDocumentStore();
 	const usersStore = useUsersStore();
 	const nodeTypesStore = useNodeTypesStore();
 	const projectsStore = useProjectsStore();
@@ -34,7 +34,7 @@ export function useCalloutHelpers() {
 		const template = getRagStarterWorkflowJson();
 
 		const routeTemplateId = route.query.templateId;
-		const workflow = workflowsListStore.getWorkflowById(workflowsStore.workflowId);
+		const workflow = workflowsListStore.getWorkflowById(workflowDocumentStore.value.workflowId);
 
 		// Hide the RAG starter callout if we're currently on the RAG starter template
 		if ((routeTemplateId ?? workflow?.meta?.templateId) === template.meta.templateId) {

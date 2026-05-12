@@ -22,7 +22,6 @@ import { useExternalHooks } from '@/app/composables/useExternalHooks';
 import { useTelemetry } from '@/app/composables/useTelemetry';
 import { useNodeTypesStore } from '@/app/stores/nodeTypes.store';
 import { useUIStore } from '@/app/stores/ui.store';
-import { useWorkflowsStore } from '@/app/stores/workflows.store';
 import { injectWorkflowDocumentStore } from '@/app/stores/workflowDocument.store';
 import type { TelemetryNdvType } from '@/app/types/telemetry';
 import { getNodeIconSource } from '@/app/utils/nodeIcon';
@@ -44,7 +43,6 @@ import { useViewStacks } from './composables/useViewStacks';
 import { prepareCommunityNodeDetailsViewStack, transformNodeType } from './nodeCreator.utils';
 
 export const useNodeCreatorStore = defineStore(STORES.NODE_CREATOR, () => {
-	const workflowsStore = useWorkflowsStore();
 	const workflowDocumentStore = injectWorkflowDocumentStore();
 	const ndvStore = useNDVStore();
 	const uiStore = useUIStore();
@@ -162,7 +160,7 @@ export const useNodeCreatorStore = defineStore(STORES.NODE_CREATOR, () => {
 				source,
 				mode: getMode(nodeCreatorView),
 				connectionType,
-				workflow_id: workflowsStore.workflowId,
+				workflow_id: workflowDocumentStore.value.workflowId,
 			});
 		}
 	}

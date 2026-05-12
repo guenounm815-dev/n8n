@@ -366,12 +366,11 @@ export function executeData(
 	currentNode: string,
 	inputName: string,
 	runIndex: number,
+	workflowId: string,
 	parentRunIndex?: number,
 ): IExecuteData {
 	const workflowsStore = useWorkflowsStore();
-	const workflowDocumentStore = useWorkflowDocumentStore(
-		createWorkflowDocumentId(workflowsStore.workflowId),
-	);
+	const workflowDocumentStore = useWorkflowDocumentStore(createWorkflowDocumentId(workflowId));
 
 	return executeDataImpl(
 		connections,
@@ -572,7 +571,7 @@ export function useWorkflowHelpers() {
 			},
 		} as const;
 		const baseUrl = baseUrls[showUrlFor][nodeType ?? 'webhook'];
-		const workflowId = workflowsStore.workflowId;
+		const workflowId = workflowDocumentStore.value.workflowId;
 		const path = (await getWebhookExpressionValue(webhookData, 'path', true, node.name)) ?? '';
 		const isFullPath =
 			((await getWebhookExpressionValue(
@@ -660,12 +659,14 @@ export function useWorkflowHelpers() {
 	) {
 		let data: WorkflowDataUpdate = {};
 
-		const workflowDocumentStore = useWorkflowDocumentStore(createWorkflowDocumentId(workflowId));
-		const isCurrentWorkflow = workflowId === workflowsStore.workflowId;
+		const targetWorkflowDocumentStore = useWorkflowDocumentStore(
+			createWorkflowDocumentId(workflowId),
+		);
+		const isCurrentWorkflow = workflowId === workflowDocumentStore.value.workflowId;
 		if (isCurrentWorkflow) {
 			data = partialData
-				? { versionId: workflowDocumentStore.versionId }
-				: workflowDocumentStore.serialize();
+				? { versionId: targetWorkflowDocumentStore.versionId }
+				: targetWorkflowDocumentStore.serialize();
 		} else {
 			const { versionId } = await workflowsListStore.fetchWorkflow(workflowId);
 			data.versionId = versionId;
@@ -686,13 +687,13 @@ export function useWorkflowHelpers() {
 
 		if (workflow.activeVersion) {
 			workflowsStore.setWorkflowActive(workflowId, workflow.activeVersion, isCurrentWorkflow);
-			workflowDocumentStore.setActiveState({
+			targetWorkflowDocumentStore.setActiveState({
 				activeVersionId: workflow.activeVersion.versionId,
 				activeVersion: workflow.activeVersion,
 			});
 		} else {
 			workflowsStore.setWorkflowInactive(workflowId);
-			workflowDocumentStore.setActiveState({
+			targetWorkflowDocumentStore.setActiveState({
 				activeVersionId: null,
 				activeVersion: null,
 			});
@@ -869,10 +870,10 @@ export function useWorkflowHelpers() {
 	async function checkConflictingWebhooks(workflowId: string) {
 		let data;
 		if (uiStore.stateIsDirty) {
-			const workflowDocumentStore = useWorkflowDocumentStore(
-				createWorkflowDocumentId(workflowsStore.workflowId),
+			const currentWorkflowDocumentStore = useWorkflowDocumentStore(
+				createWorkflowDocumentId(workflowDocumentStore.value.workflowId),
 			);
-			data = workflowDocumentStore.serialize();
+			data = currentWorkflowDocumentStore.serialize();
 		} else {
 			data = await workflowsListStore.fetchWorkflow(workflowId);
 		}

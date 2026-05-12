@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { setActivePinia } from 'pinia';
 import { createTestingPinia } from '@pinia/testing';
 import { useWorkflowUpdate } from './useWorkflowUpdate';
-import { useWorkflowsStore } from '@/app/stores/workflows.store';
 import {
 	useWorkflowDocumentStore,
 	createWorkflowDocumentId,
@@ -49,6 +48,7 @@ const mockDocumentStore = vi.hoisted(() => ({
 		renameNode: vi.fn(),
 	}),
 	connectionsBySourceNode: {},
+	workflowId: 'test-workflow',
 	workflowTriggerNodes: [] as INodeUi[],
 })) as unknown as ReturnType<typeof useWorkflowDocumentStore>;
 
@@ -85,7 +85,6 @@ vi.mock('@/app/utils/nodeTypesUtils', () => ({
 }));
 
 describe('useWorkflowUpdate', () => {
-	let workflowsStore: ReturnType<typeof mockedStore<typeof useWorkflowsStore>>;
 	let builderStore: ReturnType<typeof mockedStore<typeof useBuilderStore>>;
 	let credentialsStore: ReturnType<typeof mockedStore<typeof useCredentialsStore>>;
 	let nodeTypesStore: ReturnType<typeof mockedStore<typeof useNodeTypesStore>>;
@@ -95,7 +94,6 @@ describe('useWorkflowUpdate', () => {
 
 		setActivePinia(createTestingPinia());
 
-		workflowsStore = mockedStore(useWorkflowsStore);
 		builderStore = mockedStore(useBuilderStore);
 		credentialsStore = mockedStore(useCredentialsStore);
 		nodeTypesStore = mockedStore(useNodeTypesStore);
@@ -115,13 +113,11 @@ describe('useWorkflowUpdate', () => {
 		vi.mocked(mockDocumentStore.getNodeByName).mockReturnValue(null);
 		vi.mocked(mockDocumentStore.setNodeIssue).mockClear();
 		vi.mocked(mockDocumentStore.updateNodeProperties).mockClear();
-		workflowsStore.workflowId = 'test-workflow';
 		vi.mocked(mockDocumentStore.cloneWorkflowObject).mockReturnValue({
 			nodes: {},
 			connectionsBySourceNode: {},
 			renameNode: vi.fn(),
 		} as Partial<Workflow> as Workflow);
-		workflowsStore.nodesByName = {};
 
 		builderStore.setBuilderMadeEdits = vi.fn();
 

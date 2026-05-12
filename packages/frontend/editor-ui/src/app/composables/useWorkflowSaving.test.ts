@@ -51,6 +51,14 @@ vi.mock('@n8n/permissions', () => ({
 	}),
 }));
 
+vi.mock('vue-router', async (importOriginal) => {
+	const actual = (await importOriginal()) as object;
+	return {
+		...actual,
+		useRoute: vi.fn(() => ({ name: 'workflow', params: { workflowId: 'test-workflow' } })),
+	};
+});
+
 const getDuplicateTestWorkflow = (): WorkflowDataUpdate => ({
 	name: 'Duplicate webhook test',
 	active: false,

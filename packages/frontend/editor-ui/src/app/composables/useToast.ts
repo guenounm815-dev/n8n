@@ -3,8 +3,8 @@ import type { NotificationHandle, MessageBoxState } from 'element-plus';
 import type { NotificationOptions } from '@/Interface';
 import { sanitizeHtml } from '@/app/utils/htmlUtils';
 import { useTelemetry } from '@/app/composables/useTelemetry';
-import { useWorkflowsStore } from '@/app/stores/workflows.store';
 import { useUIStore } from '@/app/stores/ui.store';
+import { useWorkflowId } from './useWorkflowId';
 import { useI18n } from '@n8n/i18n';
 import { useExternalHooks } from './useExternalHooks';
 import { VIEWS } from '@/app/constants';
@@ -14,8 +14,8 @@ const stickyNotificationQueue: NotificationHandle[] = [];
 
 export function useToast() {
 	const telemetry = useTelemetry();
-	const workflowsStore = useWorkflowsStore();
 	const uiStore = useUIStore();
+	const workflowId = useWorkflowId();
 	const externalHooks = useExternalHooks();
 	const i18n = useI18n();
 	const { APP_Z_INDEXES } = useStyles();
@@ -83,7 +83,7 @@ export function useToast() {
 				error_title: params.title,
 				error_message: messageForTelemetry,
 				caused_by_credential: causedByCredential(messageForTelemetry),
-				workflow_id: workflowsStore.workflowId,
+				workflow_id: workflowId.value,
 			});
 		}
 
@@ -179,7 +179,7 @@ export function useToast() {
 			error_description: message,
 			error_message: error.message,
 			caused_by_credential: causedByCredential(error.message),
-			workflow_id: workflowsStore.workflowId,
+			workflow_id: workflowId.value,
 		});
 	}
 
