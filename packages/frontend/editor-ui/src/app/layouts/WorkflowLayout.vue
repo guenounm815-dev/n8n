@@ -56,9 +56,7 @@ onMounted(async () => {
 watch(
 	workflowId,
 	async (newId, oldId) => {
-		if (newId) {
-			await initializeWorkflow(!!oldId);
-		}
+		await initializeWorkflow(!!oldId);
 	},
 	{ flush: 'post', immediate: true },
 );
