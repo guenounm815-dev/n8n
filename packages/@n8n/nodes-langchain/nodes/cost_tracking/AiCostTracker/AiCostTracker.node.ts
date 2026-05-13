@@ -151,8 +151,8 @@ export class AiCostTracker implements INodeType {
 				type: 'options',
 				default: 'openai',
 				options: [
-					{ name: 'AWS Bedrock', value: 'amazon-bedrock' },
 					{ name: 'Anthropic', value: 'anthropic' },
+					{ name: 'AWS Bedrock', value: 'amazon-bedrock' },
 					{ name: 'Cohere', value: 'cohere' },
 					{ name: 'Google', value: 'google' },
 					{ name: 'Groq', value: 'groq' },
@@ -187,8 +187,8 @@ export class AiCostTracker implements INodeType {
 				type: 'options',
 				default: 'throw',
 				options: [
-					{ name: 'Block (throw error)', value: 'throw' },
-					{ name: 'Warn (log only)', value: 'warn' },
+					{ name: 'Block (Throw Error)', value: 'throw' },
+					{ name: 'Warn (Log Only)', value: 'warn' },
 				],
 			},
 		],
