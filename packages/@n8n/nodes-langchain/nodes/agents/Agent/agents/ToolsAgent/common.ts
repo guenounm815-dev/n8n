@@ -1,3 +1,4 @@
+import type { BaseCallbackHandler } from '@langchain/core/callbacks/base';
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { HumanMessage } from '@langchain/core/messages';
 import type { BaseMessage } from '@langchain/core/messages';
@@ -364,7 +365,25 @@ export async function getChatModel(
 			'Tools Agent requires Chat Model which supports Tools calling',
 		);
 	}
+
+	const costCallback = await getOptionalCostTrackerCallback(ctx);
+	if (costCallback) {
+		const existing = Array.isArray(model.callbacks) ? model.callbacks : [];
+		model.callbacks = [...existing, costCallback];
+	}
+
 	return model;
+}
+
+/**
+ * Retrieves an optional cost tracker callback handler from a connected
+ * AI Cost Tracker sub-node. Returns undefined if no tracker is wired.
+ */
+export async function getOptionalCostTrackerCallback(
+	ctx: IExecuteFunctions | ISupplyDataFunctions | IWebhookFunctions,
+): Promise<BaseCallbackHandler | undefined> {
+	const data = await ctx.getInputConnectionData(NodeConnectionTypes.AiCostTracker, 0);
+	return data as BaseCallbackHandler | undefined;
 }
 
 /**

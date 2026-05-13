@@ -50,6 +50,7 @@ export class AgentV3 implements INodeType {
 						required: false,
 						displayOptions: { show: { hasOutputParser: [true] } },
 					},
+					ai_costTracker: { required: false },
 				},
 			},
 			properties: [

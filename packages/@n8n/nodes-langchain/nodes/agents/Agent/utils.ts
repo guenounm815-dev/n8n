@@ -80,6 +80,10 @@ export function getInputs(
 			displayName: 'Output Parser',
 			type: 'ai_outputParser',
 		},
+		{
+			displayName: 'Cost Tracker',
+			type: 'ai_costTracker',
+		},
 	];
 
 	if (hasOutputParser === false) {
