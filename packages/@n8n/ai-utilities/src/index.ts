@@ -14,6 +14,25 @@ export { N8nBinaryLoader } from './utils/n8n-binary-loader';
 export { N8nJsonLoader } from './utils/n8n-json-loader';
 export { N8nLlmTracing } from './utils/n8n-llm-tracing';
 export {
+	fetchProviderCatalog,
+	getCachedCatalog,
+	getModelCost,
+	lookupModelCost,
+	computeCost,
+	type ModelCost,
+	type ModelInfo,
+	type ModelLimits,
+	type ProviderInfo,
+	type ProviderCatalog,
+} from './utils/pricing';
+export {
+	CostAccumulator,
+	evaluateBudget,
+	type BudgetCaps,
+	type BudgetAction,
+	type CostSnapshot,
+} from './utils/cost-tracking';
+export {
 	TextEditorDocument,
 	NoMatchFoundError,
 	MultipleMatchesError,
