@@ -1,38 +1,48 @@
-ARG NODE_VERSION=24.14.1
-ARG N8N_VERSION=snapshot
-
-# Rebuild native addons for the container platform. The base image has no
-# package manager or build tools, so we compile in a throwaway builder stage.
-FROM node:${NODE_VERSION}-alpine3.22 AS builder
-COPY ./compiled /usr/local/lib/node_modules/n8n
-RUN apk add --no-cache python3 make g++ && \
-    cd /usr/local/lib/node_modules/n8n && \
-    npm rebuild sqlite3 isolated-vm
-
-FROM n8nio/base:${NODE_VERSION}
-
-ARG N8N_VERSION
-ARG N8N_RELEASE_TYPE=dev
-ENV NODE_ENV=production
-ENV N8N_RELEASE_TYPE=${N8N_RELEASE_TYPE}
-ENV SHELL=/bin/sh
-
-WORKDIR /home/node
-
-COPY --from=builder /usr/local/lib/node_modules/n8n /usr/local/lib/node_modules/n8n
-COPY docker/images/n8n/docker-entrypoint.sh /
-
-RUN ln -s /usr/local/lib/node_modules/n8n/bin/n8n /usr/local/bin/n8n && \
-    mkdir -p /home/node/.n8n && \
-    chown -R node:node /home/node && \
-    rm -rf /root/.npm /tmp/*
-
-EXPOSE 5678/tcp
-USER node
-ENTRYPOINT ["tini", "--", "/docker-entrypoint.sh"]
-
-LABEL org.opencontainers.image.title="n8n" \
-      org.opencontainers.image.description="Workflow Automation Tool" \
-      org.opencontainers.image.source="https://github.com/n8n-io/n8n" \
-      org.opencontainers.image.url="https://n8n.io" \
-      org.opencontainers.image.version=${N8N_VERSION}
+{
+  "nodes": [
+    {
+      "parameters": {
+        "model": "gemini-1.5-flash",
+        "messages": {
+          "message": [
+            {
+              "role": "user",
+              "content": "=أنت خبير تسويق جزائري محترف. خذ هذه البيانات لمنتج من AliExpress واكتب منشور تليجرام جذاب جداً باللهجة الجزائرية (تاع همزات وشوبينغ). استخدم الإيموجي واجعل الرابط واضحاً.\n\nالمنتج: {{ $json.product_name }}\nالرابط: {{ $json.link }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "1",
+      "name": "Gemini AI Optimizer",
+      "type": "n8n-nodes-base.googleGemini",
+      "typeVersion": 1,
+      "position": [800, 300]
+    },
+    {
+      "parameters": {
+        "chatId": "YOUR_CHAT_ID",
+        "text": "={{ $node[\"Gemini AI Optimizer\"].json[\"text\"] }}",
+        "additionalFields": {}
+      },
+      "id": "2",
+      "name": "Telegram Bot Post",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [1050, 300]
+    }
+  ],
+  "connections": {
+    "Gemini AI Optimizer": {
+      "main": [
+        [
+          {
+            "node": "Telegram Bot Post",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
