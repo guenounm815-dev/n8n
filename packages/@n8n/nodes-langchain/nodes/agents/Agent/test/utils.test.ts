@@ -154,6 +154,10 @@ describe('getInputs', () => {
 				displayName: 'Output Parser',
 				maxConnections: 1,
 			},
+			{
+				type: 'ai_costTracker',
+				displayName: 'Cost Tracker',
+			},
 		]);
 	});
 
@@ -198,6 +202,10 @@ describe('getInputs', () => {
 				type: 'ai_tool',
 				displayName: 'Tool',
 			},
+			{
+				type: 'ai_costTracker',
+				displayName: 'Cost Tracker',
+			},
 		]);
 	});
 
@@ -232,6 +240,10 @@ describe('getInputs', () => {
 				type: 'ai_outputParser',
 				displayName: 'Output Parser',
 				maxConnections: 1,
+			},
+			{
+				type: 'ai_costTracker',
+				displayName: 'Cost Tracker',
 			},
 		]);
 	});
@@ -271,6 +283,10 @@ describe('getInputs', () => {
 			{
 				type: 'ai_tool',
 				displayName: 'Tool',
+			},
+			{
+				type: 'ai_costTracker',
+				displayName: 'Cost Tracker',
 			},
 		]);
 	});
