@@ -107,6 +107,7 @@ const outputTypeParsers: {
 	},
 	[NodeConnectionTypes.AiTool]: fallbackParser,
 	[NodeConnectionTypes.AiAgent]: fallbackParser,
+	[NodeConnectionTypes.AiCostTracker]: fallbackParser,
 	[NodeConnectionTypes.AiMemory](execData: IDataObject) {
 		const chatHistory =
 			execData.chatHistory ??

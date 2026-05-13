@@ -2444,6 +2444,7 @@ export interface IPostReceiveSort extends IPostReceiveBase {
 export const NodeConnectionTypes = {
 	AiAgent: 'ai_agent',
 	AiChain: 'ai_chain',
+	AiCostTracker: 'ai_costTracker',
 	AiDocument: 'ai_document',
 	AiEmbedding: 'ai_embedding',
 	AiLanguageModel: 'ai_languageModel',
