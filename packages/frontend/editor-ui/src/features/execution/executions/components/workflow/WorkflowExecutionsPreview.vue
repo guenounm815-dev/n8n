@@ -427,6 +427,7 @@ const onVoteClick = async (voteValue: AnnotationVote) => {
 			loader-type="spinner"
 			:execution-id="executionId"
 			:execution-mode="execution?.mode || ''"
+			:workflow-id="workflowId"
 			:node-id="nodeId"
 		/>
 	</div>

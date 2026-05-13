@@ -55,6 +55,7 @@ import {
 } from '@/app/stores/workflowDocument.store';
 import { getPairedItemsMapping } from '@/app/utils/pairedItemUtils';
 import { useNodeTypesStore } from './nodeTypes.store';
+import { useWorkflowId } from '../composables/useWorkflowId';
 
 export const useWorkflowsStore = defineStore(STORES.WORKFLOWS, () => {
 	const uiStore = useUIStore();
@@ -82,7 +83,7 @@ export const useWorkflowsStore = defineStore(STORES.WORKFLOWS, () => {
 	/**
 	 * @deprecated use useWorkflowId() in Vue components/composables instead.
 	 */
-	const workflowId = ref('');
+	const workflowId = useWorkflowId();
 
 	// A workflow is new if it hasn't been saved to the backend yet.
 	// TODO: move to workflowDocumentStore after `workflow` ref is removed from this store.
@@ -258,8 +259,8 @@ export const useWorkflowsStore = defineStore(STORES.WORKFLOWS, () => {
 		);
 	}
 
-	function setWorkflowId(id?: string) {
-		workflowId.value = id || '';
+	function setWorkflowId(_id?: string) {
+		//
 	}
 
 	function resetWorkflow() {

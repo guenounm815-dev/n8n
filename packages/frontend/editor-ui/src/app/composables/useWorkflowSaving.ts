@@ -475,7 +475,6 @@ export function useWorkflowSaving({
 			if (workflowData.checksum) {
 				newDocumentStore.setChecksum(workflowData.checksum);
 			}
-			workflowsStore.setWorkflowId(workflowData.id);
 			newDocumentStore.setVersionData({
 				versionId: workflowData.versionId,
 				name: null,

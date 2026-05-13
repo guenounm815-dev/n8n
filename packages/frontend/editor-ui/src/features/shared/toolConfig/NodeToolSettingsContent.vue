@@ -29,7 +29,7 @@ import { computed, onBeforeUnmount, onMounted, provide, ref, shallowRef, watch }
 import {
 	ChatHubToolContextKey,
 	ExpressionLocalResolveContextSymbol,
-	WorkflowDocumentStoreKey,
+	WorkflowIdKey,
 } from '@/app/constants';
 import type { ExpressionLocalResolveContext } from '@/app/types/expressions';
 import useEnvironmentsStore from '@/features/settings/environments.ee/environments.store';
@@ -137,14 +137,13 @@ const hasCredentialIssues = computed(() => {
 	return Object.keys(credentialIssues?.credentials ?? {}).length > 0;
 });
 
-const workflowDocumentStore = computed(() => {
-	const store = useWorkflowDocumentStore(createWorkflowDocumentId('node-tool-workflow'));
+const workflowId = computed(() => 'node-tool-workflow');
+const workflowDocumentStore = computed(() =>
+	useWorkflowDocumentStore(createWorkflowDocumentId(workflowId.value)),
+);
 
-	if (node.value) {
-		store.setNodes([node.value]);
-	}
-
-	return store;
+watch([workflowDocumentStore, node], ([store, node]) => store.setNodes(node ? [node] : []), {
+	immediate: true,
 });
 
 const expressionResolveCtx = computed<ExpressionLocalResolveContext | undefined>(() => {
@@ -165,7 +164,7 @@ const isValid = computed(() => {
 
 // Provide expression resolve context for dynamic parameter loading
 provide(ExpressionLocalResolveContextSymbol, expressionResolveCtx);
-provide(WorkflowDocumentStoreKey, workflowDocumentStore);
+provide(WorkflowIdKey, workflowId);
 provide(ChatHubToolContextKey, true);
 
 function makeUniqueName(baseName: string, existingNames: string[]): string {

@@ -1,6 +1,3 @@
-import { WorkflowIdKey } from '@/app/constants/injectionKeys';
-import { injectStrict } from '@/app/utils/injectStrict';
+import { useWorkflowId } from './useWorkflowId';
 
-export function useInjectWorkflowId() {
-	return injectStrict(WorkflowIdKey);
-}
+export const useInjectWorkflowId = useWorkflowId;

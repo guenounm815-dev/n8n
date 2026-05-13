@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, inject, ref, onMounted, watch } from 'vue';
+import { computed, ref, onMounted, watch } from 'vue';
 import { useI18n } from '@n8n/i18n';
 import { useRouter } from 'vue-router';
 import { useEvaluationStore } from '@/features/ai/evaluation.ee/evaluation.store';
@@ -26,7 +26,7 @@ import { MCP_DOCS_PAGE_URL, MCP_SETTINGS_VIEW } from '@/features/ai/mcpAccess/mc
 import { N8nSuggestedActions } from '@n8n/design-system';
 import { useSettingsStore } from '@/app/stores/settings.store';
 import { useUsersStore } from '@/features/settings/users/users.store';
-import { WorkflowDocumentStoreKey } from '@/app/constants/injectionKeys';
+import { injectWorkflowDocumentStore } from '../stores/workflowDocument.store';
 
 const i18n = useI18n();
 const router = useRouter();
@@ -39,7 +39,7 @@ const telemetry = useTelemetry();
 const sourceControlStore = useSourceControlStore();
 const settingsStore = useSettingsStore();
 const usersStore = useUsersStore();
-const workflowDocumentStore = inject(WorkflowDocumentStoreKey, null);
+const workflowDocumentStore = injectWorkflowDocumentStore();
 
 const isPopoverOpen = ref(false);
 const cachedSettings = ref<WorkflowSettings | null>(null);

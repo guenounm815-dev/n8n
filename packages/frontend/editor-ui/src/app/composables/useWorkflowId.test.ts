@@ -3,21 +3,25 @@ import { useWorkflowId } from '@/app/composables/useWorkflowId';
 import { WorkflowIdKey } from '@/app/constants/injectionKeys';
 import { render } from '@testing-library/vue';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { computed, defineComponent, h } from 'vue';
+import { computed, defineComponent, h, ref } from 'vue';
 
 const route = vi.hoisted(() => ({
 	name: '' as string | symbol,
 	params: {} as { workflowId?: string | string[] },
+	query: {} as { workflowId?: string | string[] },
 }));
 
 vi.mock('vue-router', () => ({
-	useRoute: () => route,
+	useRouter: () => ({
+		currentRoute: ref(route),
+	}),
 }));
 
 describe('useWorkflowId', () => {
 	beforeEach(() => {
 		route.name = VIEWS.WORKFLOW;
 		route.params = {};
+		route.query = {};
 	});
 
 	it('uses the workflow route workflowId parameter', () => {
@@ -42,6 +46,26 @@ describe('useWorkflowId', () => {
 
 		expect(useWorkflowId().value).toBe('demo');
 	});
+
+	it.each([VIEWS.DEMO, VIEWS.DEMO_DIFF])(
+		'uses workflowId query param on %s route when provided',
+		(routeName) => {
+			route.name = routeName;
+			route.query = { workflowId: 'real-workflow-id' };
+
+			expect(useWorkflowId().value).toBe('real-workflow-id');
+		},
+	);
+
+	it.each([VIEWS.DEMO, VIEWS.DEMO_DIFF])(
+		'falls back to demo on %s route when workflowId query param is empty',
+		(routeName) => {
+			route.name = routeName;
+			route.query = { workflowId: '' };
+
+			expect(useWorkflowId().value).toBe('demo');
+		},
+	);
 
 	it('uses an injected workflow ID when provided', () => {
 		route.params = { workflowId: 'route-workflow-id' };

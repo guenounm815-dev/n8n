@@ -1,7 +1,6 @@
 import { defineStore, getActivePinia } from 'pinia';
 import { STORES } from '@n8n/stores';
-import { computed, inject, type ShallowRef } from 'vue';
-import { WorkflowDocumentStoreKey } from '@/app/constants/injectionKeys';
+import { computed, type ShallowRef } from 'vue';
 import { useWorkflowDocumentActive } from './workflowDocument/useWorkflowDocumentActive';
 import { useWorkflowDocumentHomeProject } from './workflowDocument/useWorkflowDocumentHomeProject';
 import { useWorkflowDocumentSharedWithProjects } from './workflowDocument/useWorkflowDocumentSharedWithProjects';
@@ -40,7 +39,7 @@ import { deepCopy } from 'n8n-workflow';
 import type { WorkflowData } from '@n8n/rest-api-client/api/workflows';
 import type { Scope } from '@n8n/permissions';
 import type { IUsedCredential } from '@/features/credentials/credentials.types';
-import { useWorkflowsStore } from './workflows.store';
+import { useWorkflowId } from '../composables/useWorkflowId';
 
 export {
 	getPinDataSize,
@@ -433,15 +432,7 @@ export function disposeWorkflowDocumentStore(store: WorkflowDocumentStore) {
  * document store and avoid calling this outside a component tree.
  */
 export function injectWorkflowDocumentStore(): ShallowRef<WorkflowDocumentStore> {
-	const workflowsStore = useWorkflowsStore();
-	const fallback = computed(() => {
-		// TODO: once usages outside of a component tree is eliminated,
-		// this can be replaced with useWorkflowId()
-		const fallbackWorkflowId = workflowsStore.workflowId;
+	const workflowId = useWorkflowId();
 
-		return useWorkflowDocumentStore(createWorkflowDocumentId(fallbackWorkflowId));
-	});
-	const injected = inject(WorkflowDocumentStoreKey, null);
-
-	return computed(() => injected?.value ?? fallback.value);
+	return computed(() => useWorkflowDocumentStore(createWorkflowDocumentId(workflowId.value)));
 }

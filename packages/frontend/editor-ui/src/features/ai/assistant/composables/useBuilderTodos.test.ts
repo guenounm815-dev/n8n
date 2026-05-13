@@ -7,7 +7,6 @@ import {
 	isPlaceholderValue,
 	useBuilderTodos,
 } from './useBuilderTodos';
-import { useWorkflowsStore } from '@/app/stores/workflows.store';
 import {
 	useWorkflowDocumentStore,
 	createWorkflowDocumentId,
@@ -329,8 +328,7 @@ describe('useBuilderTodos', () => {
 			}) as INodeUi;
 
 		function getWorkflowDocumentStore() {
-			const workflowsStore = useWorkflowsStore();
-			return useWorkflowDocumentStore(createWorkflowDocumentId(workflowsStore.workflowId));
+			return useWorkflowDocumentStore(createWorkflowDocumentId(''));
 		}
 
 		function setPinData(pinData: IPinData) {
@@ -339,8 +337,6 @@ describe('useBuilderTodos', () => {
 
 		beforeEach(() => {
 			setActivePinia(createPinia());
-			const workflowsStore = useWorkflowsStore();
-			workflowsStore.setWorkflowId('test-workflow');
 		});
 
 		it('excludes placeholder issues from pinned nodes', () => {
@@ -413,8 +409,6 @@ describe('useBuilderTodos', () => {
 		});
 
 		it('excludes credential issues from pinned AI model nodes with incoming connections', () => {
-			const workflowsStore = useWorkflowsStore();
-
 			// Setup an AI model node with credential issues (like OpenAI GPT-4o-mini)
 			const aiModelNode = createMockNode({
 				name: 'OpenAI GPT-4o-mini',
@@ -447,9 +441,7 @@ describe('useBuilderTodos', () => {
 			});
 
 			// Verify the issue exists in nodeValidationIssues before filtering
-			const workflowDocumentStore = useWorkflowDocumentStore(
-				createWorkflowDocumentId(workflowsStore.workflowId),
-			);
+			const workflowDocumentStore = useWorkflowDocumentStore(createWorkflowDocumentId(''));
 			const validationIssues = workflowDocumentStore.nodeValidationIssues;
 			expect(validationIssues.some((i) => i.node === 'OpenAI GPT-4o-mini')).toBe(true);
 
@@ -460,8 +452,6 @@ describe('useBuilderTodos', () => {
 		});
 
 		it('excludes credential issues from sub-nodes when parent node has pinned data', () => {
-			const workflowsStore = useWorkflowsStore();
-
 			// Setup: AI model sub-node with credential issues
 			const aiModelSubNode = createMockNode({
 				name: 'OpenAI GPT-4.1-mini',
@@ -497,9 +487,7 @@ describe('useBuilderTodos', () => {
 			});
 
 			// Verify validation issue exists for the sub-node
-			const workflowDocumentStore = useWorkflowDocumentStore(
-				createWorkflowDocumentId(workflowsStore.workflowId),
-			);
+			const workflowDocumentStore = useWorkflowDocumentStore(createWorkflowDocumentId(''));
 			const validationIssues = workflowDocumentStore.nodeValidationIssues;
 			expect(validationIssues.some((i) => i.node === 'OpenAI GPT-4.1-mini')).toBe(true);
 
@@ -693,8 +681,6 @@ describe('useBuilderTodos', () => {
 		});
 
 		it('excludes issues from sub-nodes when parent node is disabled', () => {
-			const workflowsStore = useWorkflowsStore();
-
 			// Setup: AI model sub-node with credential issues
 			const aiModelSubNode = createMockNode({
 				name: 'OpenAI GPT-4.1-mini',
@@ -725,9 +711,7 @@ describe('useBuilderTodos', () => {
 			setPinData({});
 
 			// Verify validation issue exists for the sub-node
-			const workflowDocumentStore = useWorkflowDocumentStore(
-				createWorkflowDocumentId(workflowsStore.workflowId),
-			);
+			const workflowDocumentStore = useWorkflowDocumentStore(createWorkflowDocumentId(''));
 			const validationIssues = workflowDocumentStore.nodeValidationIssues;
 			expect(validationIssues.some((i) => i.node === 'OpenAI GPT-4.1-mini')).toBe(true);
 

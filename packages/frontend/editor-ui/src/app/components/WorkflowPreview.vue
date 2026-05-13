@@ -15,6 +15,7 @@ const props = withDefaults(
 		workflow?: IWorkflowDb | IWorkflowTemplate['workflow'];
 		executionId?: string;
 		executionMode?: string;
+		workflowId?: string;
 		nodeId?: string;
 		loaderType?: 'image' | 'spinner';
 		canOpenNDV?: boolean;
@@ -31,6 +32,7 @@ const props = withDefaults(
 		workflow: undefined,
 		executionId: undefined,
 		executionMode: undefined,
+		workflowId: undefined,
 		nodeId: undefined,
 		loaderType: 'image',
 		canOpenNDV: true,
@@ -68,6 +70,9 @@ const iframeSrc = computed(() => {
 	}
 	if (props.canExecute) {
 		params.set('canExecute', 'true');
+	}
+	if (props.workflowId) {
+		params.set('workflowId', props.workflowId);
 	}
 	const qs = params.toString();
 	return qs ? `${basePath}?${qs}` : basePath;

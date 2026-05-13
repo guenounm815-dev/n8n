@@ -15,10 +15,9 @@ import { injectNDVStore } from '@/features/ndv/shared/ndv.store';
 import { useSettingsStore } from '@/app/stores/settings.store';
 import { useUIStore } from '@/app/stores/ui.store';
 import { useWorkflowsListStore } from '@/app/stores/workflowsList.store';
-import { computed, inject, onBeforeMount, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, onBeforeMount, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import type { RouteLocation, RouteLocationRaw } from 'vue-router';
 import { useRoute, useRouter } from 'vue-router';
-import { WorkflowDocumentStoreKey } from '@/app/constants/injectionKeys';
 import { useInjectWorkflowId } from '@/app/composables/useInjectWorkflowId';
 
 import { useLocalStorage } from '@vueuse/core';
@@ -27,6 +26,7 @@ import type { FolderShortInfo } from '@/features/core/folders/folders.types';
 
 import { N8nIcon } from '@n8n/design-system';
 import { useToast } from '@/app/composables/useToast';
+import { injectWorkflowDocumentStore } from '@/app/stores/workflowDocument.store';
 const router = useRouter();
 const route = useRoute();
 const locale = useI18n();
@@ -70,7 +70,7 @@ const hideMenuBar = computed(() =>
 	Boolean(activeNode.value && activeNode.value.type !== STICKY_NODE_TYPE),
 );
 const workflowId = useInjectWorkflowId();
-const workflowDocumentStore = inject(WorkflowDocumentStoreKey, null);
+const workflowDocumentStore = injectWorkflowDocumentStore();
 const workflowName = computed(() => workflowDocumentStore?.value?.name ?? '');
 const workflowTags = computed(() => workflowDocumentStore?.value?.tags ?? []);
 const workflowIsArchived = computed(() => workflowDocumentStore?.value?.isArchived ?? false);

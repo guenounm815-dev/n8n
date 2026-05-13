@@ -51,17 +51,16 @@ onMounted(async () => {
 	pushConnectionStore.pushConnect();
 	setupPostMessages();
 	await initializeData();
-	await initializeWorkflow();
 });
 
 watch(
 	workflowId,
 	async (newId, oldId) => {
-		if (newId !== oldId && newId) {
-			await initializeWorkflow(true);
+		if (newId) {
+			await initializeWorkflow(!!oldId);
 		}
 	},
-	{ flush: 'post' },
+	{ flush: 'post', immediate: true },
 );
 
 // Watch for entering debug mode on the same workflow (e.g., from executions tab)

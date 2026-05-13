@@ -5,7 +5,6 @@ import { createTestingPinia } from '@pinia/testing';
 
 import { useNodeMention } from './useNodeMention';
 import { useFocusedNodesStore } from '../focusedNodes.store';
-import { useWorkflowsStore } from '@/app/stores/workflows.store';
 import type { INodeUi } from '@/Interface';
 
 vi.mock('@/app/stores/posthog.store', () => ({
@@ -74,7 +73,6 @@ const mockNodes: INodeUi[] = [
 ];
 
 describe('useNodeMention', () => {
-	let workflowsStore: ReturnType<typeof useWorkflowsStore>;
 	let focusedNodesStore: ReturnType<typeof useFocusedNodesStore>;
 
 	beforeEach(() => {
@@ -87,12 +85,8 @@ describe('useNodeMention', () => {
 			}),
 		);
 
-		workflowsStore = useWorkflowsStore();
 		focusedNodesStore = useFocusedNodesStore();
 
-		workflowsStore.setWorkflowId('test-wf');
-		// @ts-expect-error -- mock readonly property for focusedNodesStore which still reads workflowsStore.allNodes
-		workflowsStore.allNodes = mockNodes;
 		mockWorkflowDocumentStore.allNodes = mockNodes;
 	});
 

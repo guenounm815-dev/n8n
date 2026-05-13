@@ -27,7 +27,6 @@ import { getResourcePermissions } from '@n8n/permissions';
 import { createEventBus } from '@n8n/utils/event-bus';
 import {
 	computed,
-	inject,
 	onBeforeUnmount,
 	onMounted,
 	ref,
@@ -42,7 +41,7 @@ import { useSettingsStore } from '@/app/stores/settings.store';
 import { useUIStore } from '@/app/stores/ui.store';
 import { useWorkflowsStore } from '@/app/stores/workflows.store';
 import { useWorkflowsListStore } from '@/app/stores/workflowsList.store';
-import { WorkflowDocumentStoreKey } from '@/app/constants/injectionKeys';
+import { injectWorkflowDocumentStore } from '@/app/stores/workflowDocument.store';
 
 const WORKFLOW_NAME_BP_TO_WIDTH: { [key: string]: number } = {
 	XS: 150,
@@ -82,7 +81,7 @@ const message = useMessage();
 const toast = useToast();
 const documentTitle = useDocumentTitle();
 const workflowId = useInjectWorkflowId();
-const workflowDocumentStore = inject(WorkflowDocumentStoreKey, null);
+const workflowDocumentStore = injectWorkflowDocumentStore();
 
 const isTagsEditEnabled = ref(false);
 const appliedTagIds = ref<string[]>([]);

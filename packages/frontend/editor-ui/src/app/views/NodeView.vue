@@ -1769,7 +1769,6 @@ onBeforeRouteLeave(async (to, from, next) => {
 				await router.push(to);
 				return false;
 			}
-			workflowsStore.setWorkflowId('');
 			return true;
 		},
 	});
